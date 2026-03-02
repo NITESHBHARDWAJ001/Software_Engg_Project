@@ -7,14 +7,11 @@ import {
   FiShare2,
   FiTrendingUp,
   FiUsers,
-  FiBarChart2,
   FiSmile,
   FiMeh,
   FiFrown,
   FiTarget,
-  FiDollarSign,
   FiActivity,
-  FiHash,
 } from 'react-icons/fi';
 import {
   socialMediaService,
@@ -56,7 +53,6 @@ const SENTIMENT_COLORS = {
 const AnalyticsPage: React.FC = () => {
   const { currentOrganization } = useOrganizationStore();
   const [reels, setReels] = useState<SocialReel[]>([]);
-  const [selectedReel, setSelectedReel] = useState<SocialReel | null>(null);
   const [sentimentData, setSentimentData] = useState<any>(null);
   const [sentimentTrend, setSentimentTrend] = useState<any[]>([]);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -291,7 +287,7 @@ const AnalyticsPage: React.FC = () => {
                 <Card
                   key={reel.id}
                   className="hover:shadow-lg transition-all cursor-pointer overflow-hidden"
-                  onClick={() => setSelectedReel(reel)}
+                  onClick={() => {}}
                 >
                   <div className="relative h-64">
                     <img
@@ -362,8 +358,8 @@ const AnalyticsPage: React.FC = () => {
             </div>
           ) : (
             <EmptyState
-              icon={FiPlay}
-              message="No reels found"
+              icon={<FiPlay />}
+              title="No reels found"
               description="Start creating content to see analytics"
             />
           )}
@@ -606,7 +602,7 @@ const AnalyticsPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {competitors.map((competitor, index) => (
+                    {competitors.map((competitor) => (
                       <tr
                         key={competitor.id}
                         className={`border-b hover:bg-gray-50 ${
@@ -768,8 +764,8 @@ const AnalyticsPage: React.FC = () => {
             </div>
           ) : (
             <EmptyState
-              icon={FiTarget}
-              message="No campaigns found"
+              icon={<FiTarget />}
+              title="No campaigns found"
               description="Create marketing campaigns to track performance"
             />
           )}

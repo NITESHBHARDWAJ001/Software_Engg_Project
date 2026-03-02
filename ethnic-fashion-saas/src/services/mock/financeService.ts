@@ -1,5 +1,5 @@
 // Mock data service for Finance Management
-import { generateId, formatCurrency } from '../../utils/helpers';
+import { generateId } from '../../utils/helpers';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -254,7 +254,7 @@ export const financeService = {
     );
   },
 
-  async getCashFlowData(organizationId: string): Promise<CashFlowData[]> {
+  async getCashFlowData(_organizationId: string): Promise<CashFlowData[]> {
     await delay(500);
     return mockCashFlowData;
   },

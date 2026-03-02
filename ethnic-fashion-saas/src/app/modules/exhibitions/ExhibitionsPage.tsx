@@ -13,7 +13,7 @@ import {
   FiAlertCircle,
   FiTarget,
 } from 'react-icons/fi';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Card, CardBody, CardHeader } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
@@ -22,7 +22,7 @@ import { EmptyState } from '../../../components/ui/EmptyState';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { Exhibition, ExhibitionStatus, ExhibitionLead, LeadInterestLevel, ExhibitionROI } from '../../../types';
 import { exhibitionService } from '../../../services/mock/exhibitionService';
-import { formatCurrency, formatDate, getRelativeTime } from '../../../utils/helpers';
+import { formatCurrency, formatDate } from '../../../utils/helpers';
 
 type ViewMode = 'list' | 'calendar' | 'analytics';
 

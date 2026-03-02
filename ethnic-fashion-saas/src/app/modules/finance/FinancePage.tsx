@@ -14,6 +14,7 @@ import {
   FiPlus,
   FiDownload,
   FiEye,
+  FiBarChart2,
 } from 'react-icons/fi';
 import {
   financeService,
@@ -507,14 +508,14 @@ const FinancePage: React.FC = () => {
               All ({invoices.length})
             </Button>
             <Button
-              variant={filterStatus === InvoiceStatus.PENDING ? 'warning' : 'outline'}
+              variant={filterStatus === InvoiceStatus.PENDING ? 'primary' : 'outline'}
               size="sm"
               onClick={() => setFilterStatus(InvoiceStatus.PENDING)}
             >
               Pending ({invoices.filter(i => i.status === InvoiceStatus.PENDING).length})
             </Button>
             <Button
-              variant={filterStatus === InvoiceStatus.PAID ? 'success' : 'outline'}
+              variant={filterStatus === InvoiceStatus.PAID ? 'primary' : 'outline'}
               size="sm"
               onClick={() => setFilterStatus(InvoiceStatus.PAID)}
             >
@@ -594,15 +595,11 @@ const FinancePage: React.FC = () => {
             </div>
           ) : (
             <EmptyState
-              icon={FiFileText}
-              message="No invoices found"
+              icon={<FiFileText />}
+              title="No invoices found"
               description="Create your first invoice to get started"
-              action={
-                <Button variant="primary">
-                  <FiPlus className="w-4 h-4 mr-2" />
-                  New Invoice
-                </Button>
-              }
+              actionLabel="New Invoice"
+              onAction={() => {}}
             />
           )}
         </>
@@ -679,8 +676,8 @@ const FinancePage: React.FC = () => {
               </div>
             ) : (
               <EmptyState
-                icon={FiCreditCard}
-                message="No transactions yet"
+                icon={<FiCreditCard />}
+                title="No transactions yet"
                 description="Transaction history will appear here"
               />
             )}

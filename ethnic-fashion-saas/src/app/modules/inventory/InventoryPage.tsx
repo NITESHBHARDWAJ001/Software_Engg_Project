@@ -6,7 +6,6 @@ import {
   FiCheckCircle,
   FiDollarSign,
   FiBarChart2,
-  FiTrendingDown,
   FiSearch,
   FiFilter,
   FiPlus,
@@ -315,10 +314,10 @@ const InventoryPage: React.FC = () => {
                 <div>
                   <p className="text-sm text-gray-600">Last Restocked</p>
                   <p className="text-sm font-semibold text-gray-900 mt-1">
-                    {getRelativeTime(new Date(selectedItem.lastRestocked))}
+                    {selectedItem.lastRestocked ? getRelativeTime(new Date(selectedItem.lastRestocked)) : 'N/A'}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {formatDate(new Date(selectedItem.lastRestocked))}
+                    {selectedItem.lastRestocked ? formatDate(new Date(selectedItem.lastRestocked)) : 'N/A'}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-info/10 rounded-lg flex items-center justify-center">
@@ -409,8 +408,8 @@ const InventoryPage: React.FC = () => {
                 </div>
               ) : (
                 <EmptyState
-                  icon={FiBarChart2}
-                  message="No transactions yet"
+                  icon={<FiBarChart2 />}
+                  title="No transactions yet"
                   description="Transaction history will appear here"
                 />
               )}
@@ -572,7 +571,7 @@ const InventoryPage: React.FC = () => {
                     cx="50%"
                     cy="50%"
                     outerRadius={100}
-                    label={(entry) => `${entry.name}: ${entry.count}`}
+                    label={(entry: any) => `${entry.name}: ${entry.value}`}
                   >
                     {categoryChartData.map((entry, index) => (
                       <Cell
@@ -735,19 +734,15 @@ const InventoryPage: React.FC = () => {
             </div>
           ) : (
             <EmptyState
-              icon={FiPackage}
-              message="No inventory items found"
+              icon={<FiPackage />}
+              title="No inventory items found"
               description={
                 searchQuery || filterCategory !== 'all' || filterStatus !== 'all'
                   ? 'Try adjusting your search or filters'
                   : 'Start by adding your first inventory item'
               }
-              action={
-                <Button variant="primary">
-                  <FiPlus className="w-4 h-4 mr-2" />
-                  Add Item
-                </Button>
-              }
+              actionLabel="Add Item"
+              onAction={() => {}}
             />
           )}
         </>

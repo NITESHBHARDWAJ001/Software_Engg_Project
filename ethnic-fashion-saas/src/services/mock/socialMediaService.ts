@@ -1,5 +1,4 @@
 // Mock data service for Social Media & Marketing Analytics
-import { generateId } from '../../utils/helpers';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 

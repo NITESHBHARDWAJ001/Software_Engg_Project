@@ -235,7 +235,7 @@ const CustomersPage: React.FC = () => {
                 <div>
                   <p className="text-sm text-gray-600">Last Purchase</p>
                   <p className="text-sm font-semibold text-gray-900 mt-1">
-                    {getRelativeTime(new Date(selectedCustomer.lastPurchaseDate))}
+                    {selectedCustomer.lastPurchaseDate ? getRelativeTime(new Date(selectedCustomer.lastPurchaseDate)) : 'N/A'}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-info/10 rounded-lg flex items-center justify-center">
@@ -362,8 +362,8 @@ const CustomersPage: React.FC = () => {
                 </div>
               ) : (
                 <EmptyState
-                  icon={FiShoppingBag}
-                  message="No purchase history available"
+                  icon={<FiShoppingBag />}
+                  title="No purchase history available"
                   description="This customer hasn't made any purchases yet."
                 />
               )}
@@ -631,19 +631,15 @@ const CustomersPage: React.FC = () => {
         </div>
       ) : (
         <EmptyState
-          icon={FiUsers}
-          message="No customers found"
+          icon={<FiUsers />}
+          title="No customers found"
           description={
             searchQuery || filterStatus !== 'all' || filterType !== 'all'
               ? 'Try adjusting your search or filters'
               : 'Start by adding your first customer'
           }
-          action={
-            <Button variant="primary">
-              <FiPlus className="w-4 h-4 mr-2" />
-              Add Customer
-            </Button>
-          }
+          actionLabel="Add Customer"
+          onAction={() => {}}
         />
       )}
     </div>
