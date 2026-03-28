@@ -18,7 +18,7 @@ import { Spinner } from '../../../components/ui/Spinner';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { Task, TaskStatus, TaskPriority } from '../../../types';
-import { taskService } from '../../../services/mock/taskService';
+import { taskService } from '../../../services/api/taskService';
 import { formatDate, getRelativeTime } from '../../../utils/helpers';
 
 type ViewMode = 'list' | 'kanban' | 'calendar';

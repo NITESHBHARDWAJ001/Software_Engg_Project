@@ -21,7 +21,7 @@ import { Spinner } from '../../../components/ui/Spinner';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { Exhibition, ExhibitionStatus, ExhibitionLead, LeadInterestLevel, ExhibitionROI } from '../../../types';
-import { exhibitionService } from '../../../services/mock/exhibitionService';
+import { exhibitionService } from '../../../services/api/exhibitionService';
 import { formatCurrency, formatDate } from '../../../utils/helpers';
 
 type ViewMode = 'list' | 'calendar' | 'analytics';
