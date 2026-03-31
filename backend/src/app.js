@@ -23,11 +23,29 @@ import { notFoundHandler } from './shared/middleware/notFound.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
 
 export const app = express();
+app.set('trust proxy', 1);
+
+const normalizeOrigin = (value) => value.replace(/\/+$/, '');
+const allowedOrigins = env.CORS_ORIGIN.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+  .map(normalizeOrigin);
 
 app.use(helmet());
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      // Allow non-browser requests (e.g., server-to-server, curl, health checks).
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const normalizedIncomingOrigin = normalizeOrigin(origin);
+      const isAllowed = allowedOrigins.includes(normalizedIncomingOrigin);
+
+      callback(null, isAllowed);
+    },
     credentials: true,
   }),
 );
