@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   FiDollarSign, 
   FiUsers, 
@@ -30,13 +31,14 @@ import { useAuthStore } from '../../../store/authStore';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { UserRole } from '../../../types';
 import { formatCurrency, formatNumber, getRelativeTime } from '../../../utils/helpers';
+import { ROUTES } from '../../../utils/constants';
 import {
-  dashboardService,
+  dashboardApiService,
   DashboardStats,
   RevenueChartData,
   ExhibitionPerformance,
   RecentActivity,
-} from '../../../services/mock/dashboardService';
+} from '../../../services/api/dashboardService';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -59,10 +61,10 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const [statsData, revenueChart, exhibitionData, activities] = await Promise.all([
-        dashboardService.getDashboardStats(user.role, currentOrganization.id),
-        user.role !== UserRole.STAFF ? dashboardService.getRevenueChart(currentOrganization.id) : Promise.resolve([]),
-        user.role !== UserRole.STAFF ? dashboardService.getExhibitionPerformance(currentOrganization.id) : Promise.resolve([]),
-        dashboardService.getRecentActivities(user.role, currentOrganization.id),
+        dashboardApiService.getDashboardStats(user.role),
+        dashboardApiService.getRevenueChart(user.role),
+        dashboardApiService.getExhibitionPerformance(user.role),
+        dashboardApiService.getRecentActivities(user.role),
       ]);
 
       setStats(statsData);
@@ -269,6 +271,28 @@ export default function Dashboard() {
           </CardBody>
         </Card>
       </div>
+
+      {currentOrganization && (
+        <Card>
+          <CardHeader title="Subscription" subtitle="Track your current plan and upgrade options" />
+          <CardBody>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Current plan</span>
+                  <Badge variant="primary">{currentOrganization.subscriptionPlan}</Badge>
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                  Billing status: {currentOrganization.billingStatus}
+                </p>
+              </div>
+              <Link to={ROUTES.SETTINGS_SUBSCRIPTION}>
+                <Button>View Plans & Upgrade</Button>
+              </Link>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Charts Row */}
       {revenueData.length > 0 && (

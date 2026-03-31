@@ -25,6 +25,18 @@ type ApiPaged<T> = {
   };
 };
 
+type ExhibitionStats = {
+  totalExhibitions: number;
+  ongoingExhibitions: number;
+  completedExhibitions: number;
+  totalLeads: number;
+  convertedLeads: number;
+  conversionRate: number;
+  totalRevenue: number;
+  totalBudget: number;
+  roi: number;
+};
+
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = useAuthStore.getState().token;
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -46,7 +58,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const exhibitionService = {
   async getAllExhibitions(_organizationId: string): Promise<Exhibition[]> {
-    const res = await apiRequest<ApiPaged<Exhibition[]>>('/v1/exhibitions?page=1&pageSize=200');
+    const res = await apiRequest<ApiPaged<Exhibition[]>>('/v1/exhibitions?page=1&pageSize=100');
     return res.data;
   },
 
@@ -56,7 +68,12 @@ export const exhibitionService = {
   },
 
   async getExhibitionsByStatus(_organizationId: string, status: ExhibitionStatus): Promise<Exhibition[]> {
-    const res = await apiRequest<ApiPaged<Exhibition[]>>(`/v1/exhibitions?page=1&pageSize=200&status=${status}`);
+    const res = await apiRequest<ApiPaged<Exhibition[]>>(`/v1/exhibitions?page=1&pageSize=100&status=${status}`);
+    return res.data;
+  },
+
+  async getExhibitionStats(): Promise<ExhibitionStats> {
+    const res = await apiRequest<ApiSuccess<ExhibitionStats>>('/v1/exhibitions/stats');
     return res.data;
   },
 
@@ -73,17 +90,11 @@ export const exhibitionService = {
     return res.data;
   },
 
-  async updateLead(leadId: string, updates: Partial<ExhibitionLead>): Promise<ExhibitionLead> {
-    const current = await this.getLeadById(leadId);
-    if (!current) throw new Error('Lead not found');
-
-    const res = await apiRequest<ApiSuccess<ExhibitionLead>>(
-      `/v1/exhibitions/${current.exhibitionId}/leads/${leadId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(updates),
-      },
-    );
+  async updateLead(exhibitionId: string, leadId: string, updates: Partial<ExhibitionLead>): Promise<ExhibitionLead> {
+    const res = await apiRequest<ApiSuccess<ExhibitionLead>>(`/v1/exhibitions/${exhibitionId}/leads/${leadId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
     return res.data;
   },
 
@@ -108,17 +119,7 @@ export const exhibitionService = {
     return res.data;
   },
 
-  async getLeadById(leadId: string): Promise<ExhibitionLead | null> {
-    const exhibitions = await this.getAllExhibitions('');
-    for (const exhibition of exhibitions) {
-      const leads = await this.getExhibitionLeads(exhibition.id);
-      const found = leads.find((lead) => lead.id === leadId);
-      if (found) return found;
-    }
-    return null;
-  },
-
-  async updateLeadStatus(leadId: string, status: LeadStatus): Promise<ExhibitionLead> {
-    return this.updateLead(leadId, { status });
+  async updateLeadStatus(exhibitionId: string, leadId: string, status: LeadStatus): Promise<ExhibitionLead> {
+    return this.updateLead(exhibitionId, leadId, { status });
   },
 };

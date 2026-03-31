@@ -41,4 +41,5 @@ export interface RegisterData {
 export interface LoginResponse {
   user: User;
   token: string;
+  refreshToken?: string;
 }

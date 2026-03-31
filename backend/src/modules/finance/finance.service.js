@@ -122,7 +122,7 @@ export const financeService = {
       );
     }
 
-    return prisma.invoice.update({
+    const updatedInvoice = await prisma.invoice.update({
       where: { id },
       data: {
         status,
@@ -130,6 +130,33 @@ export const financeService = {
         updatedBy: userId,
       },
     });
+
+    if (status === InvoiceStatus.PAID) {
+      const existingIncomeEntry = await prisma.ledgerEntry.findFirst({
+        where: {
+          organizationId,
+          invoiceId: id,
+          type: LedgerEntryType.INCOME,
+        },
+      });
+
+      if (!existingIncomeEntry) {
+        await prisma.ledgerEntry.create({
+          data: {
+            organizationId,
+            invoiceId: id,
+            type: LedgerEntryType.INCOME,
+            amount: asDecimal(invoice.totalAmount.toNumber()),
+            entryDate: paidAt ?? new Date(),
+            category: 'Invoice Payment',
+            description: `Auto-generated income for invoice ${invoice.invoiceNumber}`,
+            createdBy: userId,
+          },
+        });
+      }
+    }
+
+    return updatedInvoice;
   },
 
   async listLedger(organizationId, page, pageSize, type, from, to) {

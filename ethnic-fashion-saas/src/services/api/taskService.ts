@@ -2,6 +2,21 @@ import { Task, TaskStatus } from '../../types';
 import { API_BASE_URL } from '../../utils/constants';
 import { useAuthStore } from '../../store/authStore';
 
+type TaskCreatePayload = {
+  title: string;
+  description?: string;
+  status?: TaskStatus;
+  priority?: Task['priority'];
+  assignedTo?: string;
+  dueDate?: string;
+  tags?: string[];
+  attachments?: string[];
+  relatedExhibitionId?: string;
+  relatedCustomerId?: string;
+};
+
+type TaskUpdatePayload = Partial<TaskCreatePayload>;
+
 type ApiSuccess<T> = {
   success: true;
   data: T;
@@ -17,6 +32,15 @@ type ApiPaged<T> = {
     total: number;
     totalPages: number;
   };
+};
+
+type TaskStats = {
+  total: number;
+  todo: number;
+  inProgress: number;
+  review: number;
+  completed: number;
+  overdue: number;
 };
 
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -40,7 +64,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const taskService = {
   async getAllTasks(_organizationId: string): Promise<Task[]> {
-    const res = await apiRequest<ApiPaged<Task[]>>('/v1/tasks?page=1&pageSize=200');
+    const res = await apiRequest<ApiPaged<Task[]>>('/v1/tasks?page=1&pageSize=100');
     return res.data;
   },
 
@@ -50,16 +74,21 @@ export const taskService = {
   },
 
   async getTasksByStatus(_organizationId: string, status: TaskStatus): Promise<Task[]> {
-    const res = await apiRequest<ApiPaged<Task[]>>(`/v1/tasks?page=1&pageSize=200&status=${status}`);
+    const res = await apiRequest<ApiPaged<Task[]>>(`/v1/tasks?page=1&pageSize=100&status=${status}`);
     return res.data;
   },
 
   async getTasksByUser(userId: string): Promise<Task[]> {
-    const res = await apiRequest<ApiPaged<Task[]>>(`/v1/tasks?page=1&pageSize=200&assignedTo=${userId}`);
+    const res = await apiRequest<ApiPaged<Task[]>>(`/v1/tasks?page=1&pageSize=100&assignedTo=${userId}`);
     return res.data;
   },
 
-  async createTask(taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> {
+  async getTaskStats(): Promise<TaskStats> {
+    const res = await apiRequest<ApiSuccess<TaskStats>>('/v1/tasks/stats');
+    return res.data;
+  },
+
+  async createTask(taskData: TaskCreatePayload): Promise<Task> {
     const res = await apiRequest<ApiSuccess<Task>>('/v1/tasks', {
       method: 'POST',
       body: JSON.stringify(taskData),
@@ -67,7 +96,7 @@ export const taskService = {
     return res.data;
   },
 
-  async updateTask(taskId: string, updates: Partial<Task>): Promise<Task> {
+  async updateTask(taskId: string, updates: TaskUpdatePayload): Promise<Task> {
     const res = await apiRequest<ApiSuccess<Task>>(`/v1/tasks/${taskId}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),

@@ -18,7 +18,6 @@ vi.mock('../../shared/db/prisma.js', () => ({
 }));
 
 import { customerService } from './customer.service.js';
-import { HttpError } from '../../shared/http/httpError.js';
 
 describe('customerService', () => {
   beforeEach(() => {
@@ -49,8 +48,10 @@ describe('customerService', () => {
   it('throws when customer is not found by id', async () => {
     prismaMock.customer.findFirst.mockResolvedValue(null);
 
-    await expect(customerService.getById('org-1', 'missing')).rejects.toBeInstanceOf(HttpError);
-    await expect(customerService.getById('org-1', 'missing')).rejects.toMatchObject({ statusCode: 404 });
+    await expect(customerService.getById('org-1', 'missing')).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'CUSTOMER_NOT_FOUND',
+    });
   });
 
   it('creates customer with audit fields', async () => {

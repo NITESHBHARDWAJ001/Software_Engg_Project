@@ -13,6 +13,14 @@ enum Role {
   STAFF
 }
 
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  TEMPORARY
+}
+
 model Organization {
   id          String   @id @default(uuid())
   name        String
@@ -39,6 +47,11 @@ model User {
   passwordHash   String
   firstName      String
   lastName       String
+  phone          String?
+  jobTitle       String?
+  employmentType EmploymentType?
+  employmentValidFrom DateTime?
+  employmentValidTo DateTime?
   role           Role            @default(STAFF)
   isActive       Boolean         @default(true)
   organizationId String?
