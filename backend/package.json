@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "npm run prisma:generate && npm run prisma:deploy && node src/server.js",
-    "start:docker": "prisma db push --accept-data-loss --skip-generate && node src/server.js",
+    "start:docker": "npx prisma db push --accept-data-loss --skip-generate && node src/server.js",
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:watch": "vitest",

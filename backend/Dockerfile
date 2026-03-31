@@ -17,4 +17,4 @@ RUN npx prisma generate
 ENV NODE_ENV=production
 EXPOSE 4000
 
-CMD ["sh", "-c", "prisma db push --accept-data-loss --skip-generate && node src/server.js"]
+CMD ["npm", "run", "start:docker"]
