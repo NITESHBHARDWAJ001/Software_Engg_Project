@@ -11,6 +11,7 @@ import { ROUTES } from '../../utils/constants';
 import { canAccessModule } from '../../utils/permissions';
 import { classNames } from '../../utils/helpers';
 import { Badge } from '../../components/ui';
+import { authService } from '../../services/api/authService';
 
 interface SidebarItem {
   label: string;
@@ -26,6 +27,7 @@ const getSidebarItems = (role: UserRole): SidebarItem[] => {
     { label: 'Tasks', icon: <FiCheckSquare />, path: ROUTES.TASKS, module: 'tasks' },
     { label: 'Exhibitions', icon: <FiCalendar />, path: ROUTES.EXHIBITIONS, module: 'exhibitions' },
     { label: 'Customers', icon: <FiUsers />, path: ROUTES.CUSTOMERS, module: 'customers' },
+    { label: 'Employees', icon: <FiUsers />, path: ROUTES.EMPLOYEES, module: 'users' },
     { label: 'Inventory', icon: <FiPackage />, path: ROUTES.INVENTORY, module: 'inventory' },
     { label: 'Finance', icon: <FiDollarSign />, path: ROUTES.FINANCE, module: 'finance' },
     { label: 'Analytics', icon: <FiTrendingUp />, path: ROUTES.ANALYTICS, module: 'analytics' },
@@ -39,13 +41,13 @@ export const AppLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const organization = useCurrentOrganization();
 
   const sidebarItems = user ? getSidebarItems(user.role) : [];
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await authService.logout();
     window.location.href = ROUTES.LOGIN;
   };
 
@@ -73,11 +75,9 @@ export const AppLayout: React.FC = () => {
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200">
           <Link to={ROUTES.DASHBOARD} className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary-dark rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">E</span>
-            </div>
+            <img src="/logo.jpeg" alt="OperIQ logo" className="w-10 h-10 rounded-lg object-cover" />
             <span className="text-lg font-bold text-gray-900">
-              EthnicFashion
+              OperIQ
             </span>
           </Link>
           <button

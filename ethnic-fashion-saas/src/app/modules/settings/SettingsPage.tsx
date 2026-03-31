@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   FiUser,
   FiBriefcase,
@@ -21,13 +22,22 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Input } from '../../../components/ui/Input';
 import { UserRole } from '../../../types';
+import { superAdminService, type SaasPlan } from '../../../services/api/superAdminService';
+import { authService } from '../../../services/api/authService';
+import { toast } from 'sonner';
+import { ROUTES } from '../../../utils/constants';
+
+type SettingsTab = 'profile' | 'organization' | 'users' | 'subscription';
 
 const SettingsPage: React.FC = () => {
   const { user } = useAuthStore();
-  const { currentOrganization } = useOrganizationStore();
-  const [activeTab, setActiveTab] = useState<'profile' | 'organization' | 'users' | 'subscription'>(
-    'profile'
-  );
+  const { currentOrganization, setCurrentOrganization } = useOrganizationStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const [plans, setPlans] = useState<SaasPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [upgradingPlanId, setUpgradingPlanId] = useState<string | null>(null);
 
   // Mock team members
   const teamMembers = [
@@ -70,6 +80,95 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const loadPlans = async () => {
+      setPlansLoading(true);
+      try {
+        const availablePlans = await superAdminService.getPlans(true);
+        setPlans(availablePlans);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to load subscription plans');
+      } finally {
+        setPlansLoading(false);
+      }
+    };
+
+    loadPlans();
+  }, []);
+
+  useEffect(() => {
+    if (location.pathname.endsWith('/subscription')) {
+      setActiveTab('subscription');
+      return;
+    }
+    if (location.pathname.endsWith('/organization')) {
+      setActiveTab('organization');
+      return;
+    }
+    if (location.pathname.endsWith('/users')) {
+      setActiveTab('users');
+      return;
+    }
+    setActiveTab('profile');
+  }, [location.pathname]);
+
+  const selectTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    if (tab === 'profile') {
+      navigate(ROUTES.SETTINGS);
+      return;
+    }
+    if (tab === 'organization') {
+      navigate(ROUTES.SETTINGS_ORGANIZATION);
+      return;
+    }
+    if (tab === 'users') {
+      navigate(ROUTES.SETTINGS_USERS);
+      return;
+    }
+    navigate(ROUTES.SETTINGS_SUBSCRIPTION);
+  };
+
+  const getCurrentPlanPrice = () => {
+    if (!currentOrganization) return 0;
+    const match = plans.find(
+      (plan) =>
+        plan.code.toUpperCase() === currentOrganization.subscriptionPlan ||
+        plan.name.toUpperCase() === currentOrganization.subscriptionPlan,
+    );
+    return match?.price ?? 0;
+  };
+
+  const runUpgrade = async (plan: SaasPlan) => {
+    if (!currentOrganization || !user) return;
+    if (user.role !== UserRole.ORG_ADMIN) {
+      toast.error('Only organization admins can upgrade plans');
+      return;
+    }
+
+    setUpgradingPlanId(plan.id);
+    try {
+      await superAdminService.runMockCheckout({
+        organizationId: currentOrganization.id,
+        planId: plan.id,
+        paymentMethod: 'CARD',
+        activateNow: true,
+        notes: 'Organization dashboard self-service upgrade',
+      });
+
+      const refreshedOrganization = await authService.getCurrentOrganization();
+      if (refreshedOrganization) {
+        setCurrentOrganization(refreshedOrganization);
+      }
+
+      toast.success(`Plan upgraded to ${plan.name}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Plan upgrade failed');
+    } finally {
+      setUpgradingPlanId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -81,7 +180,7 @@ const SettingsPage: React.FC = () => {
       {/* Tabs */}
       <div className="flex gap-2 border-b">
         <button
-          onClick={() => setActiveTab('profile')}
+          onClick={() => selectTab('profile')}
           className={`px-4 py-2 font-medium ${
             activeTab === 'profile'
               ? 'text-primary border-b-2 border-primary'
@@ -92,7 +191,7 @@ const SettingsPage: React.FC = () => {
           Profile
         </button>
         <button
-          onClick={() => setActiveTab('organization')}
+          onClick={() => selectTab('organization')}
           className={`px-4 py-2 font-medium ${
             activeTab === 'organization'
               ? 'text-primary border-b-2 border-primary'
@@ -103,7 +202,7 @@ const SettingsPage: React.FC = () => {
           Organization
         </button>
         <button
-          onClick={() => setActiveTab('users')}
+          onClick={() => selectTab('users')}
           className={`px-4 py-2 font-medium ${
             activeTab === 'users'
               ? 'text-primary border-b-2 border-primary'
@@ -114,7 +213,7 @@ const SettingsPage: React.FC = () => {
           Team Members
         </button>
         <button
-          onClick={() => setActiveTab('subscription')}
+          onClick={() => selectTab('subscription')}
           className={`px-4 py-2 font-medium ${
             activeTab === 'subscription'
               ? 'text-primary border-b-2 border-primary'
@@ -453,13 +552,7 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold text-primary">
-                    {currentOrganization?.subscriptionPlan === 'STARTER'
-                      ? formatCurrency(2999)
-                      : currentOrganization?.subscriptionPlan === 'PROFESSIONAL'
-                      ? formatCurrency(5999)
-                      : formatCurrency(15000)}
-                  </p>
+                  <p className="text-3xl font-bold text-primary">{formatCurrency(getCurrentPlanPrice())}</p>
                   <p className="text-sm text-gray-600">/month</p>
                 </div>
               </div>
@@ -529,37 +622,55 @@ const SettingsPage: React.FC = () => {
           <Card>
             <CardHeader title="Upgrade Your Plan" />
             <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="p-6 border-2 border-gray-200 rounded-lg hover:border-primary transition-colors">
-                  <h4 className="text-lg font-bold text-gray-900 mb-2">Starter</h4>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{formatCurrency(2999)}</p>
-                  <p className="text-sm text-gray-600 mb-4">/month</p>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Current Plan
-                  </Button>
-                </div>
+              {plansLoading ? (
+                <p className="text-sm text-gray-600">Loading plans...</p>
+              ) : plans.length === 0 ? (
+                <p className="text-sm text-gray-600">No active plans available for upgrade.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {plans.map((plan) => {
+                    const isCurrent =
+                      currentOrganization?.subscriptionPlan === plan.code.toUpperCase() ||
+                      currentOrganization?.subscriptionPlan === plan.name.toUpperCase();
+                    const canUpgrade = user?.role === UserRole.ORG_ADMIN;
 
-                <div className="p-6 border-2 border-primary rounded-lg shadow-md">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-lg font-bold text-gray-900">Professional</h4>
-                    <Badge variant="primary">Popular</Badge>
-                  </div>
-                  <p className="text-3xl font-bold text-primary mb-1">{formatCurrency(5999)}</p>
-                  <p className="text-sm text-gray-600 mb-4">/month</p>
-                  <Button variant="primary" size="sm" className="w-full">
-                    Upgrade Now
-                  </Button>
+                    return (
+                      <div
+                        key={plan.id}
+                        className={`p-6 border-2 rounded-lg transition-colors ${
+                          isCurrent ? 'border-primary shadow-md' : 'border-gray-200 hover:border-primary'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-lg font-bold text-gray-900">{plan.name}</h4>
+                          {isCurrent && <Badge variant="primary">Current</Badge>}
+                        </div>
+                        <p className="text-3xl font-bold text-gray-900 mb-1">{formatCurrency(plan.price, plan.currency)}</p>
+                        <p className="text-sm text-gray-600 mb-4">/{plan.billingCycle.toLowerCase()}</p>
+                        <Button
+                          variant={isCurrent ? 'outline' : 'primary'}
+                          size="sm"
+                          className="w-full"
+                          disabled={isCurrent || !canUpgrade || upgradingPlanId === plan.id}
+                          onClick={() => {
+                            if (!isCurrent && canUpgrade) {
+                              void runUpgrade(plan);
+                            }
+                          }}
+                        >
+                          {isCurrent
+                            ? 'Current Plan'
+                            : !canUpgrade
+                            ? 'Org Admin Only'
+                            : upgradingPlanId === plan.id
+                            ? 'Upgrading...'
+                            : 'Upgrade Now'}
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
-
-                <div className="p-6 border-2 border-gray-200 rounded-lg hover:border-primary transition-colors">
-                  <h4 className="text-lg font-bold text-gray-900 mb-2">Enterprise</h4>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{formatCurrency(15000)}</p>
-                  <p className="text-sm text-gray-600 mb-4">/month</p>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Contact Sales
-                  </Button>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 

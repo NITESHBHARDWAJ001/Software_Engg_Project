@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HttpError } from '../../shared/http/httpError.js';
 
 const { prismaMock } = vi.hoisted(() => ({
   prismaMock: {
@@ -13,6 +12,7 @@ const { prismaMock } = vi.hoisted(() => ({
     ledgerEntry: {
       count: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
     },
   },
@@ -60,7 +60,10 @@ describe('financeService', () => {
         discountAmount: 0,
         totalAmount: 110,
       }),
-    ).rejects.toBeInstanceOf(HttpError);
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'INVOICE_NUMBER_EXISTS',
+    });
   });
 
   it('blocks invalid invoice status transitions', async () => {
@@ -69,6 +72,32 @@ describe('financeService', () => {
     await expect(financeService.updateInvoiceStatus('org-1', 'inv1', 'u1', 'PENDING')).rejects.toMatchObject({
       statusCode: 400,
     });
+  });
+
+  it('creates income ledger entry when invoice is marked paid without existing ledger row', async () => {
+    prismaMock.invoice.findFirst.mockResolvedValue({
+      id: 'inv1',
+      organizationId: 'org-1',
+      status: 'PENDING',
+      totalAmount: { toNumber: () => 5900 },
+      invoiceNumber: 'INV-1',
+    });
+    prismaMock.invoice.update.mockResolvedValue({ id: 'inv1', status: 'PAID' });
+    prismaMock.ledgerEntry.findFirst.mockResolvedValue(null);
+
+    await financeService.updateInvoiceStatus('org-1', 'inv1', 'u1', 'PAID');
+
+    expect(prismaMock.ledgerEntry.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.ledgerEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationId: 'org-1',
+          invoiceId: 'inv1',
+          type: 'INCOME',
+          description: expect.stringContaining('INV-1'),
+        }),
+      }),
+    );
   });
 
   it('computes finance stats from ledger and invoices', async () => {

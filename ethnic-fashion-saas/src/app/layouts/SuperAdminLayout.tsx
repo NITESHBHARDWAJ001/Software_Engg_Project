@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from '../../store';
 import { ROUTES } from '../../utils/constants';
 import { classNames } from '../../utils/helpers';
+import { authService } from '../../services/api/authService';
 
 interface SidebarItem {
   label: string;
@@ -25,10 +26,10 @@ export const SuperAdminLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await authService.logout();
     window.location.href = ROUTES.LOGIN;
   };
 
@@ -56,12 +57,10 @@ export const SuperAdminLayout: React.FC = () => {
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-primary-light/20">
           <Link to={ROUTES.SUPER_ADMIN_DASHBOARD} className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-primary font-bold text-xl">E</span>
-            </div>
+            <img src="/logo.jpeg" alt="OperIQ logo" className="w-10 h-10 rounded-lg object-cover" />
             <div>
               <span className="text-lg font-bold text-white block leading-none">
-                EthnicFashion
+                OperIQ
               </span>
               <span className="text-xs text-primary-100">Super Admin</span>
             </div>

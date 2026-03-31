@@ -6,6 +6,7 @@ import { prisma } from '../../shared/db/prisma.js';
 import { HttpError } from '../../shared/http/httpError.js';
 
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
+const FREE_PLAN_CODE = 'FREE';
 
 const signAccessToken = (payload) => {
   const expiresIn = env.JWT_ACCESS_EXPIRES_IN;
@@ -18,7 +19,147 @@ const signRefreshToken = (payload) => {
   });
 };
 
+const normalizeSlug = (value) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+
+const createUniqueOrganizationSlug = async (organizationName) => {
+  const base = normalizeSlug(organizationName) || 'organization';
+
+  let candidate = base;
+  let suffix = 2;
+
+  while (true) {
+    const exists = await prisma.organization.findUnique({ where: { slug: candidate } });
+    if (!exists) {
+      return candidate;
+    }
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+};
+
+const ensureFreePlan = async (tx, actorId) => {
+  return tx.subscriptionPlan.upsert({
+    where: { code: FREE_PLAN_CODE },
+    update: {
+      isActive: true,
+      updatedBy: actorId,
+    },
+    create: {
+      name: 'Free',
+      code: FREE_PLAN_CODE,
+      description: 'Default onboarding plan for newly joined organizations.',
+      billingCycle: 'MONTHLY',
+      price: 0,
+      currency: 'INR',
+      isActive: true,
+      features: ['CUSTOMER_MANAGEMENT', 'INVENTORY_MANAGEMENT'],
+      limits: {
+        maxUsers: 2,
+        maxExhibitions: 2,
+        maxCustomers: 200,
+        maxInventoryItems: 500,
+      },
+      createdBy: actorId,
+      updatedBy: actorId,
+    },
+  });
+};
+
 export const authService = {
+  async register(payload) {
+    const existingUser = await prisma.user.findUnique({ where: { email: payload.email } });
+    if (existingUser) {
+      throw new HttpError(409, 'Email is already registered', 'EMAIL_ALREADY_EXISTS');
+    }
+
+    const slug = await createUniqueOrganizationSlug(payload.organizationName);
+    const [firstName, ...rest] = payload.adminName.trim().split(/\s+/);
+    const lastName = rest.join(' ') || 'Admin';
+    const passwordHash = await argon2.hash(payload.password);
+
+    const { user } = await prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          name: payload.organizationName,
+          slug,
+          email: payload.email,
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          email: payload.email,
+          passwordHash,
+          firstName: firstName || 'Org',
+          lastName,
+          role: 'ORG_ADMIN',
+          isActive: true,
+          organizationId: organization.id,
+        },
+      });
+
+      const freePlan = await ensureFreePlan(tx, user.id);
+      await tx.organizationSubscription.create({
+        data: {
+          organizationId: organization.id,
+          planId: freePlan.id,
+          status: 'ACTIVE',
+          startDate: new Date(),
+          autoRenew: true,
+          seats: 2,
+          includedFeatures: [],
+          excludedFeatures: [],
+          metadata: {
+            onboarding: 'DEFAULT_FREE_PLAN',
+            createdVia: 'SELF_REGISTER',
+          },
+          createdBy: user.id,
+          updatedBy: user.id,
+        },
+      });
+
+      return { organization, user };
+    });
+
+    const authPayload = {
+      sub: user.id,
+      role: user.role,
+      organizationId: user.organizationId,
+    };
+
+    const accessToken = signAccessToken(authPayload);
+    const refreshToken = signRefreshToken(authPayload);
+    const tokenFamily = randomUUID();
+
+    await prisma.refreshSession.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(refreshToken),
+        tokenFamily,
+        expiresAt: new Date(Date.now() + env.JWT_REFRESH_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        organizationId: user.organizationId,
+      },
+    };
+  },
+
   async login(email, password) {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !user.isActive) {

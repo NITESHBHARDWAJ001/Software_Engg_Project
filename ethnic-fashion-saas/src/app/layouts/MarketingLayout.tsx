@@ -16,11 +16,9 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to={ROUTES.HOME} className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary-dark rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">E</span>
-              </div>
+              <img src="/logo.jpeg" alt="OperIQ logo" className="w-10 h-10 rounded-lg object-cover" />
               <span className="text-xl font-bold bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent">
-                EthnicFashion
+                OperIQ
               </span>
             </Link>
 
@@ -64,15 +62,13 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             {/* Company Info */}
             <div className="col-span-1">
               <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary-dark rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-xl">E</span>
-                </div>
+                <img src="/logo.jpeg" alt="OperIQ logo" className="w-8 h-8 rounded-lg object-cover" />
                 <span className="text-xl font-bold text-white">
-                  EthnicFashion
+                  OperIQ
                 </span>
               </div>
               <p className="text-sm text-gray-400">
-                Comprehensive business management solution for the ethnic fashion industry.
+                Comprehensive business management platform by OperIQ.
               </p>
             </div>
 
@@ -139,7 +135,7 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
           </div>
 
           <div className="mt-8 pt-8 border-t border-gray-800 text-center text-sm">
-            <p>&copy; {new Date().getFullYear()} EthnicFashion SaaS. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} OperIQ. All rights reserved.</p>
           </div>
         </div>
       </footer>

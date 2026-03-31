@@ -1,147 +1,146 @@
-import React, { useEffect, useState } from 'react';
-import {
- FiUsers,
-  FiUserCheck,
-  FiUserX,
-  FiDollarSign,
-  FiTrendingUp,
-  FiMail,
-  FiPhone,
-  FiMapPin,
-  FiTag,
-  FiCalendar,
-  FiShoppingBag,
-  FiSearch,
-  FiFilter,
-  FiPlus,
-} from 'react-icons/fi';
-import { Customer, CustomerType, CustomerStatus } from '../../../types';
-import { customerService, CustomerStats, PurchaseHistory } from '../../../services/mock/customerService';
-import { useOrganizationStore } from '../../../store/organizationStore';
-import { formatCurrency, formatDate, getRelativeTime } from '../../../utils/helpers';
-import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
-import { Button } from '../../../components/ui/Button';
+import { useEffect, useMemo, useState } from 'react';
+import { FiDollarSign, FiEdit2, FiPlus, FiSearch, FiTrash2, FiUserCheck, FiUserX, FiUsers } from 'react-icons/fi';
+import { toast } from 'sonner';
 import { Badge } from '../../../components/ui/Badge';
-import { EmptyState } from '../../../components/ui/EmptyState';
+import { Button } from '../../../components/ui/Button';
+import { Card, CardBody, CardHeader } from '../../../components/ui/Card';
+import { Input } from '../../../components/ui/Input';
 import { Spinner } from '../../../components/ui/Spinner';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from 'recharts';
+import { customerApiService, type CustomerRecord, type CustomerStats } from '../../../services/api/customerService';
+import { formatCurrency, formatDate } from '../../../utils/helpers';
 
-const CustomersPage: React.FC = () => {
-  const { currentOrganization } = useOrganizationStore();
-  const [customers, setCustomers] = useState<Customer[]>([]);
+type CustomerForm = {
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  country: string;
+};
+
+const initialForm: CustomerForm = {
+  name: '',
+  email: '',
+  phone: '',
+  city: '',
+  country: '',
+};
+
+const CustomersPage = () => {
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [stats, setStats] = useState<CustomerStats | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<CustomerStatus | 'all'>('all');
-  const [filterType, setFilterType] = useState<CustomerType | 'all'>('all');
+  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<CustomerForm>(initialForm);
 
-  useEffect(() => {
-    loadCustomers();
-    loadStats();
-  }, [currentOrganization?.id]);
-
-  const loadCustomers = async () => {
-    if (!currentOrganization?.id) return;
-    
+  const loadData = async () => {
     setLoading(true);
     try {
-      const data = await customerService.getAllCustomers(currentOrganization.id);
-      setCustomers(data);
+      const [list, statsData] = await Promise.all([
+        customerApiService.list(),
+        customerApiService.stats(),
+      ]);
+      setCustomers(list);
+      setStats(statsData);
     } catch (error) {
-      console.error('Failed to load customers:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to load customers');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadStats = async () => {
-    if (!currentOrganization?.id) return;
-    
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return customers;
+    const q = search.toLowerCase();
+    return customers.filter((customer) =>
+      [customer.name, customer.email, customer.phone, customer.city, customer.country]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [customers, search]);
+
+  const setField = (field: keyof CustomerForm, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const startCreate = () => {
+    setEditingId(null);
+    setForm(initialForm);
+    setShowForm(true);
+  };
+
+  const startEdit = (customer: CustomerRecord) => {
+    setEditingId(customer.id);
+    setForm({
+      name: customer.name,
+      email: customer.email || '',
+      phone: customer.phone || '',
+      city: customer.city || '',
+      country: customer.country || '',
+    });
+    setShowForm(true);
+  };
+
+  const cancelForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(initialForm);
+  };
+
+  const submitForm = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.name.trim()) {
+      toast.error('Customer name is required');
+      return;
+    }
+
+    setSaving(true);
     try {
-      const statsData = await customerService.getCustomerStats(currentOrganization.id);
-      setStats(statsData);
+      const payload = {
+        name: form.name.trim(),
+        email: form.email.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        city: form.city.trim() || undefined,
+        country: form.country.trim() || undefined,
+      };
+
+      if (editingId) {
+        const updated = await customerApiService.update(editingId, payload);
+        setCustomers((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+        toast.success('Customer updated');
+      } else {
+        const created = await customerApiService.create(payload);
+        setCustomers((prev) => [created, ...prev]);
+        toast.success('Customer created');
+      }
+
+      cancelForm();
+      setStats(await customerApiService.stats());
     } catch (error) {
-      console.error('Failed to load stats:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save customer');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const loadPurchaseHistory = async (customerId: string) => {
+  const archiveCustomer = async (customerId: string) => {
     try {
-      const history = await customerService.getPurchaseHistory(customerId);
-      setPurchaseHistory(history);
+      await customerApiService.archive(customerId);
+      setCustomers((prev) => prev.filter((row) => row.id !== customerId));
+      setStats(await customerApiService.stats());
+      toast.success('Customer archived');
     } catch (error) {
-      console.error('Failed to load purchase history:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to archive customer');
     }
   };
-
-  const handleCustomerClick = async (customer: Customer) => {
-    setSelectedCustomer(customer);
-    await loadPurchaseHistory(customer.id);
-  };
-
-  const handleBackToList = () => {
-    setSelectedCustomer(null);
-    setPurchaseHistory([]);
-  };
-
-  const getTypeColor = (type: CustomerType): 'info' | 'success' | 'warning' => {
-    switch (type) {
-      case CustomerType.RETAIL:
-        return 'info';
-      case CustomerType.WHOLESALE:
-        return 'success';
-      case CustomerType.DISTRIBUTOR:
-        return 'warning';
-      default:
-        return 'info';
-    }
-  };
-
-  const getStatusColor = (status: CustomerStatus): 'success' | 'danger' => {
-    return status === CustomerStatus.ACTIVE ? 'success' : 'danger';
-  };
-
-  const filteredCustomers = customers.filter(customer => {
-    const matchesSearch =
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.phone?.includes(searchQuery) ||
-      customer.company?.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus = filterStatus === 'all' || customer.status === filterStatus;
-    const matchesType = filterType === 'all' || customer.type === filterType;
-
-    return matchesSearch && matchesStatus && matchesType;
-  });
-
-  // Chart data for top customers
-  const topCustomersChartData =
-    stats?.topCustomers.map(c => ({
-      name: c.name.split(' ')[0],
-      value: c.lifetimeValue,
-    })) || [];
-
-  // Customer growth chart data (mock data)
-  const customerGrowthData = [
-    { month: 'Sep', customers: 120 },
-    { month: 'Oct', customers: 145 },
-    { month: 'Nov', customers: 178 },
-    { month: 'Dec', customers: 210 },
-    { month: 'Jan', customers: 252 },
-    { month: 'Feb', customers: 290 },
-  ];
 
   if (loading) {
     return (
@@ -151,497 +150,104 @@ const CustomersPage: React.FC = () => {
     );
   }
 
-  // Detail View
-  if (selectedCustomer) {
-    return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" onClick={handleBackToList}>
-              ← Back
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{selectedCustomer.name}</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant={getTypeColor(selectedCustomer.type)}>
-                  {selectedCustomer.type}
-                </Badge>
-                <Badge variant={getStatusColor(selectedCustomer.status)}>
-                  {selectedCustomer.status}
-                </Badge>
-              </div>
-            </div>
-          </div>
-          <Button variant="primary" size="sm">
-            <FiMail className="w-4 h-4 mr-2" />
-            Send Email
-          </Button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Lifetime Value</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {formatCurrency(selectedCustomer.lifetimeValue)}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <FiDollarSign className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Purchases</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {formatCurrency(selectedCustomer.totalPurchases)}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center">
-                  <FiShoppingBag className="w-6 h-6 text-success" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Orders</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {purchaseHistory.length}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-warning/10 rounded-lg flex items-center justify-center">
-                  <FiTrendingUp className="w-6 h-6 text-warning" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Last Purchase</p>
-                  <p className="text-sm font-semibold text-gray-900 mt-1">
-                    {selectedCustomer.lastPurchaseDate ? getRelativeTime(new Date(selectedCustomer.lastPurchaseDate)) : 'N/A'}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-info/10 rounded-lg flex items-center justify-center">
-                  <FiCalendar className="w-6 h-6 text-info" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Customer Details and Purchase History */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Customer Information */}
-          <Card>
-            <CardHeader title="Contact Information" />
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <FiMail className="w-5 h-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-gray-600">Email</p>
-                  <p className="text-sm font-medium text-gray-900">
-                    {selectedCustomer.email || 'N/A'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <FiPhone className="w-5 h-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-gray-600">Phone</p>
-                  <p className="text-sm font-medium text-gray-900">
-                    {selectedCustomer.phone || 'N/A'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <FiMapPin className="w-5 h-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-gray-600">Address</p>
-                  <p className="text-sm font-medium text-gray-900">
-                    {selectedCustomer.address}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {selectedCustomer.city}, {selectedCustomer.state} {selectedCustomer.pincode}
-                  </p>
-                </div>
-              </div>
-              {selectedCustomer.company && (
-                <div className="flex items-start gap-3">
-                  <FiUsers className="w-5 h-5 text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-gray-600">Company</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {selectedCustomer.company}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {selectedCustomer.tags && selectedCustomer.tags.length > 0 && (
-                <div className="flex items-start gap-3">
-                  <FiTag className="w-5 h-5 text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">Tags</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedCustomer.tags.map((tag, index) => (
-                        <Badge key={index} variant="info">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {selectedCustomer.notes && (
-                <div className="pt-4 border-t">
-                  <p className="text-sm text-gray-600 mb-1">Notes</p>
-                  <p className="text-sm text-gray-900">{selectedCustomer.notes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Purchase History */}
-          <Card className="lg:col-span-2">
-            <CardHeader title="Purchase History" />
-            <CardContent className="p-6">
-              {purchaseHistory.length > 0 ? (
-                <div className="space-y-4">
-                  {purchaseHistory.map(purchase => (
-                    <div
-                      key={purchase.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <FiShoppingBag className="w-5 h-5 text-primary" />
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              Order #{purchase.id.toUpperCase()}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              {formatDate(new Date(purchase.date))} • {purchase.items} items
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-900">
-                          {formatCurrency(purchase.amount)}
-                        </p>
-                        <Badge
-                          variant={
-                            purchase.status === 'completed'
-                              ? 'success'
-                              : purchase.status === 'pending'
-                              ? 'warning'
-                              : 'danger'
-                          }
-                        >
-                          {purchase.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  icon={<FiShoppingBag />}
-                  title="No purchase history available"
-                  description="This customer hasn't made any purchases yet."
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // List View
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Customer Management</h1>
-          <p className="text-gray-600 mt-1">Manage your customer relationships</p>
+          <h1 className="text-3xl font-bold text-gray-900">Customer Management</h1>
+          <p className="text-gray-600 mt-1">Manage customer records and relationships</p>
         </div>
-        <Button variant="primary">
-          <FiPlus className="w-4 h-4 mr-2" />
-          Add Customer
+        <Button onClick={startCreate}>
+          <FiPlus className="w-4 h-4" />
+          New Customer
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          <Card
-            className={`cursor-pointer hover:shadow-lg transition-all ${
-              filterStatus === 'all' ? 'ring-2 ring-primary' : ''
-            }`}
-            onClick={() => setFilterStatus('all')}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Customers</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {stats.totalCustomers}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <FiUsers className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card
-            className={`cursor-pointer hover:shadow-lg transition-all ${
-              filterStatus === CustomerStatus.ACTIVE ? 'ring-2 ring-success' : ''
-            }`}
-            onClick={() => setFilterStatus(CustomerStatus.ACTIVE)}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Active</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {stats.activeCustomers}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center">
-                  <FiUserCheck className="w-6 h-6 text-success" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card
-            className={`cursor-pointer hover:shadow-lg transition-all ${
-              filterStatus === CustomerStatus.INACTIVE ? 'ring-2 ring-danger' : ''
-            }`}
-            onClick={() => setFilterStatus(CustomerStatus.INACTIVE)}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Inactive</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {stats.inactiveCustomers}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-danger/10 rounded-lg flex items-center justify-center">
-                  <FiUserX className="w-6 h-6 text-danger" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {formatCurrency(stats.totalRevenue)}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-warning/10 rounded-lg flex items-center justify-center">
-                  <FiDollarSign className="w-6 h-6 text-warning" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Avg Purchase</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {formatCurrency(stats.averagePurchaseValue)}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-info/10 rounded-lg flex items-center justify-center">
-                  <FiTrendingUp className="w-6 h-6 text-info" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader title="Top Customers by Revenue" />
-          <CardContent className="p-6">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topCustomersChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(value) => formatCurrency(value as number)} />
-                <Bar dataKey="value" fill="#7B2CBF" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader title="Customer Growth Trend" />
-          <CardContent className="p-6">
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={customerGrowthData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="customers"
-                  stroke="#7B2CBF"
-                  strokeWidth={2}
-                  dot={{ fill: '#7B2CBF', r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card><CardBody><div className="text-sm text-gray-600">Total</div><div className="text-2xl font-bold">{stats?.totalCustomers ?? 0}</div></CardBody></Card>
+        <Card><CardBody><div className="text-sm text-gray-600">Active</div><div className="text-2xl font-bold text-success-600 flex items-center gap-2"><FiUserCheck />{stats?.activeCustomers ?? 0}</div></CardBody></Card>
+        <Card><CardBody><div className="text-sm text-gray-600">Inactive</div><div className="text-2xl font-bold text-warning-600 flex items-center gap-2"><FiUserX />{stats?.inactiveCustomers ?? 0}</div></CardBody></Card>
+        <Card><CardBody><div className="text-sm text-gray-600">Revenue</div><div className="text-2xl font-bold flex items-center gap-2"><FiDollarSign className="text-primary" />{formatCurrency(stats?.totalRevenue ?? 0)}</div></CardBody></Card>
       </div>
 
-      {/* Search and Filter */}
+      {showForm && (
+        <Card>
+          <CardHeader title={editingId ? 'Edit Customer' : 'Create Customer'} />
+          <CardBody>
+            <form onSubmit={submitForm} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Name" value={form.name} onChange={(e) => setField('name', e.target.value)} required />
+              <Input label="Email" type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+              <Input label="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+              <Input label="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+              <Input label="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+              <div className="md:col-span-2 flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={cancelForm}>Cancel</Button>
+                <Button type="submit" isLoading={saving}>{editingId ? 'Update Customer' : 'Create Customer'}</Button>
+              </div>
+            </form>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search customers by name, email, phone, or company..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+        <CardHeader
+          title="Customers"
+          subtitle={`${filtered.length} customers`}
+          action={
+            <div className="w-72">
+              <Input
+                placeholder="Search name, email, phone"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                leftIcon={<FiSearch className="w-4 h-4" />}
               />
             </div>
-            <div className="flex gap-2">
-              <select
-                value={filterType}
-                onChange={e => setFilterType(e.target.value as CustomerType | 'all')}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              >
-                <option value="all">All Types</option>
-                <option value={CustomerType.RETAIL}>Retail</option>
-                <option value={CustomerType.WHOLESALE}>Wholesale</option>
-                <option value={CustomerType.DISTRIBUTOR}>Distributor</option>
-              </select>
-              <Button variant="outline" size="sm">
-                <FiFilter className="w-4 h-4 mr-2" />
-                More Filters
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Customer List */}
-      {filteredCustomers.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCustomers.map(customer => (
-            <Card
-              key={customer.id}
-              className="hover:shadow-lg transition-all cursor-pointer"
-              onClick={() => handleCustomerClick(customer)}
-            >
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{customer.name}</h3>
-                    {customer.company && (
-                      <p className="text-sm text-gray-600">{customer.company}</p>
-                    )}
-                  </div>
-                  <Badge variant={getStatusColor(customer.status)}>
-                    {customer.status}
-                  </Badge>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  {customer.email && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FiMail className="w-4 h-4" />
-                      <span className="truncate">{customer.email}</span>
-                    </div>
-                  )}
-                  {customer.phone && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FiPhone className="w-4 h-4" />
-                      <span>{customer.phone}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <FiMapPin className="w-4 h-4" />
-                    <span className="truncate">{customer.city}, {customer.state}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div>
-                    <p className="text-xs text-gray-600">Lifetime Value</p>
-                    <p className="font-semibold text-primary">
-                      {formatCurrency(customer.lifetimeValue)}
-                    </p>
-                  </div>
-                  <Badge variant={getTypeColor(customer.type)}>{customer.type}</Badge>
-                </div>
-
-                {customer.tags && customer.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {customer.tags.slice(0, 2).map((tag, index) => (
-                      <span
-                        key={index}
-                        className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          icon={<FiUsers />}
-          title="No customers found"
-          description={
-            searchQuery || filterStatus !== 'all' || filterType !== 'all'
-              ? 'Try adjusting your search or filters'
-              : 'Start by adding your first customer'
           }
-          actionLabel="Add Customer"
-          onAction={() => {}}
         />
-      )}
+        <CardBody>
+          {filtered.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">No customers found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Contact</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Location</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Value</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Created</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((customer) => (
+                    <tr key={customer.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-gray-900 flex items-center gap-2"><FiUsers className="w-4 h-4 text-primary" />{customer.name}</div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        <div>{customer.email || 'N/A'}</div>
+                        <div>{customer.phone || 'N/A'}</div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{[customer.city, customer.country].filter(Boolean).join(', ') || 'N/A'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-700">{formatCurrency(customer.lifetimeValue)}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{formatDate(customer.createdAt)}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => startEdit(customer)}><FiEdit2 className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => archiveCustomer(customer.id)}><FiTrash2 className="w-4 h-4 text-red-600" /></Button>
+                          <Badge variant={customer.isArchived ? 'warning' : 'success'}>{customer.isArchived ? 'Archived' : 'Active'}</Badge>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 };

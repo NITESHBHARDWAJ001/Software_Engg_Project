@@ -7,6 +7,10 @@ export const planListQuerySchema = z.object({
   activeOnly: z.coerce.boolean().default(false),
 });
 
+export const planOrganizationsQuerySchema = z.object({
+  includeInactive: z.coerce.boolean().default(false),
+});
+
 export const planCreateSchema = z.object({
   name: z.string().min(2),
   code: z.string().min(2).max(50).regex(/^[A-Z0-9_\-]+$/i),
@@ -65,3 +69,19 @@ export const organizationSubscriptionUpdateSchema = z
       });
     }
   });
+
+export const mockCheckoutSchema = z.object({
+  organizationId: z.string().uuid().optional(),
+  planId: z.string().uuid(),
+  paymentMethod: z.enum(['CARD', 'UPI', 'BANK_TRANSFER']).default('CARD'),
+  activateNow: z.boolean().default(true),
+  offer: z
+    .object({
+      code: z.string().min(2).max(50).optional(),
+      type: z.enum(['PERCENTAGE', 'FLAT']).default('PERCENTAGE'),
+      value: z.coerce.number().min(0),
+      title: z.string().max(120).optional(),
+    })
+    .optional(),
+  notes: z.string().max(500).optional(),
+});
