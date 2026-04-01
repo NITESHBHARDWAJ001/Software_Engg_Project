@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FiUsers, FiDollarSign, FiTrendingUp, FiPackage, FiAlertCircle, FiCheckCircle, FiClock } from 'react-icons/fi';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardBody, CardHeader } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
-import { superAdminService, PlatformStats, RevenueData } from '../services/mock/superAdminService';
+import { Button } from '../components/ui/Button';
+import { superAdminService } from '../services/api/superAdminService';
+import type { PlatformStats, RevenueData } from '../services/api/superAdminService';
 import { Organization, BillingStatus, SubscriptionPlan } from '../types';
 import { formatCurrency, formatDate } from '../utils/helpers';
+import { ROUTES } from '../utils/constants';
 
 export default function SuperAdminDashboard() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
@@ -21,10 +25,10 @@ export default function SuperAdminDashboard() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const [statsData, revenueChartData, orgsData] = await Promise.all([
-        superAdminService.getPlatformStats(),
-        superAdminService.getRevenueData(),
-        superAdminService.getAllOrganizations(),
+      const orgsData = await superAdminService.getAllOrganizations(true);
+      const [statsData, revenueChartData] = await Promise.all([
+        superAdminService.getPlatformStats(orgsData),
+        superAdminService.getRevenueData(orgsData),
       ]);
       
       setStats(statsData);
@@ -94,6 +98,11 @@ export default function SuperAdminDashboard() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Platform Dashboard</h1>
         <p className="text-gray-600 mt-1">Monitor your SaaS platform performance</p>
+        <div className="mt-4">
+          <Link to={ROUTES.SUPER_ADMIN_ORGANIZATIONS}>
+            <Button variant="primary" size="sm">Create Organization</Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}

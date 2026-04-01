@@ -5,9 +5,11 @@ import { getOrganizationScope, tenantGuard } from '../../shared/middleware/tenan
 import { HttpError } from '../../shared/http/httpError.js';
 import { ok } from '../../shared/http/response.js';
 import {
+  mockCheckoutSchema,
   organizationSubscriptionCreateSchema,
   organizationSubscriptionUpdateSchema,
   planCreateSchema,
+  planOrganizationsQuerySchema,
   planListQuerySchema,
   planUpdateSchema,
 } from './subscription.schemas.js';
@@ -44,6 +46,13 @@ subscriptionRouter.delete('/plans/:planId', allowRoles(SUPER_ADMIN), async (req,
   const planId = Array.isArray(req.params.planId) ? req.params.planId[0] : req.params.planId;
   const plan = await subscriptionService.deactivatePlan(planId, req.auth.userId);
   res.json(ok(plan, 'Subscription plan deactivated'));
+});
+
+subscriptionRouter.get('/plans/:planId/organizations', allowRoles(SUPER_ADMIN), async (req, res) => {
+  const planId = Array.isArray(req.params.planId) ? req.params.planId[0] : req.params.planId;
+  const query = planOrganizationsQuerySchema.parse(req.query);
+  const organizations = await subscriptionService.listOrganizationsOnPlan(planId, query.includeInactive);
+  res.json(ok(organizations));
 });
 
 subscriptionRouter.get('/organizations/:organizationId/current', allowRoles(SUPER_ADMIN), async (req, res) => {
@@ -118,4 +127,18 @@ subscriptionRouter.get('/me/features/:featureKey', allowRoles(ORG_ADMIN, STAFF),
   const hasAccess = await subscriptionService.hasFeatureAccess(organizationId, featureKey);
 
   res.json(ok({ featureKey, hasAccess }));
+});
+
+subscriptionRouter.post('/mock-checkout', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+  const payload = mockCheckoutSchema.parse(req.body);
+
+  const scopedOrganizationId = getOrganizationScope(req);
+  const organizationId = req.auth.role === SUPER_ADMIN ? payload.organizationId : scopedOrganizationId;
+
+  if (!organizationId) {
+    throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+  }
+
+  const result = await subscriptionService.mockCheckoutAndActivate(organizationId, req.auth.userId, payload);
+  res.status(201).json(ok(result, 'Mock checkout completed'));
 });

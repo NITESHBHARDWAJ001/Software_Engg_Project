@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Button, Input, Card } from '../components/ui';
 import { useAuthStore } from '../store';
 import { useOrganizationStore } from '../store/organizationStore';
-import { authService, mockOrganizations } from '../services/mock/authService';
+import { authService } from '../services/api/authService';
 import { ROUTES } from '../utils/constants';
 
 const registerSchema = z.object({
@@ -107,19 +107,17 @@ const RegisterPage: React.FC = () => {
       });
 
       // Set auth
-      setAuth(response.user, response.token);
+      setAuth(response.user, response.token, response.refreshToken);
 
       // Set organization
       if (response.user.organizationId) {
-        const org = mockOrganizations.find(
-          (o) => o.id === response.user.organizationId
-        );
+        const org = await authService.getCurrentOrganization();
         if (org) {
           setCurrentOrganization(org);
         }
       }
 
-      toast.success(`Welcome to EthnicFashion, ${response.user.name}! Your 14-day trial has started.`);
+      toast.success(`Welcome to OperIQ, ${response.user.name}! Your 14-day trial has started.`);
       navigate(ROUTES.DASHBOARD);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Registration failed');
@@ -139,11 +137,9 @@ const RegisterPage: React.FC = () => {
         {/* Logo and Header */}
         <div className="text-center mb-10">
           <Link to={ROUTES.HOME} className="inline-flex items-center space-x-2 mb-6">
-            <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary-dark rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">E</span>
-            </div>
+            <img src="/logo.jpeg" alt="OperIQ logo" className="w-12 h-12 rounded-xl object-cover" />
             <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent">
-              EthnicFashion
+              OperIQ
             </span>
           </Link>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">

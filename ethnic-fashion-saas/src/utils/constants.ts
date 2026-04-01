@@ -1,5 +1,5 @@
-export const APP_NAME = 'EthnicFashion SaaS';
-export const APP_DESCRIPTION = 'Comprehensive Business Management Solution for Ethnic Fashion Industry';
+export const APP_NAME = 'OperIQ';
+export const APP_DESCRIPTION = 'Comprehensive business management platform by OperIQ';
 
 // In dev mode, use relative path for Vite proxy (no CORS issues)
 // In prod, use env var or fallback to /api
@@ -38,6 +38,7 @@ export const ROUTES = {
   EXHIBITION_DETAIL: '/app/exhibitions/:id',
   EXHIBITION_LEAD_CAPTURE: '/app/exhibitions/:id/capture',
   CUSTOMERS: '/app/customers',
+  EMPLOYEES: '/app/employees',
   CUSTOMER_DETAIL: '/app/customers/:id',
   INVENTORY: '/app/inventory',
   INVENTORY_CATEGORIES: '/app/inventory/categories',

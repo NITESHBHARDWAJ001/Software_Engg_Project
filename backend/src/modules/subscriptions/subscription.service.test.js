@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HttpError } from '../../shared/http/httpError.js';
 
 const { prismaMock } = vi.hoisted(() => ({
   prismaMock: {
@@ -52,7 +51,10 @@ describe('subscriptionService', () => {
         isActive: true,
         features: [],
       }),
-    ).rejects.toBeInstanceOf(HttpError);
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'PLAN_CODE_EXISTS',
+    });
   });
 
   it('returns false for feature when no subscription exists', async () => {
@@ -111,5 +113,39 @@ describe('subscriptionService', () => {
     expect(sub.effectiveFeatures).toContain('CUSTOMER_MANAGEMENT');
     expect(sub.effectiveFeatures).toContain('TASK_MANAGEMENT');
     expect(sub.effectiveFeatures).not.toContain('FINANCE_MANAGEMENT');
+  });
+
+  it('runs mock checkout and returns paid invoice summary', async () => {
+    prismaMock.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+    prismaMock.subscriptionPlan.findUnique.mockResolvedValue({
+      id: 'p1',
+      name: 'Growth',
+      code: 'GROWTH',
+      billingCycle: 'MONTHLY',
+      price: { toString: () => '1000' },
+      currency: 'INR',
+      isActive: true,
+      features: ['TASK_MANAGEMENT'],
+    });
+
+    const assignSpy = vi
+      .spyOn(subscriptionService, 'assignPlanToOrganization')
+      .mockResolvedValue({ id: 's1', effectiveFeatures: ['TASK_MANAGEMENT'] });
+
+    const result = await subscriptionService.mockCheckoutAndActivate('org-1', 'u1', {
+      planId: 'p1',
+      paymentMethod: 'CARD',
+      activateNow: true,
+      offer: {
+        type: 'PERCENTAGE',
+        value: 10,
+        code: 'SPRING10',
+      },
+    });
+
+    expect(result.paymentStatus).toBe('PAID');
+    expect(result.invoice.finalAmount).toBe(900);
+    expect(assignSpy).toHaveBeenCalledTimes(1);
+    assignSpy.mockRestore();
   });
 });

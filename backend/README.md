@@ -12,17 +12,18 @@ A production-ready, multi-tenant backend system for an ethnic fashion e-commerce
 ## Table of Contents
 
 1. [System Architecture](#system-architecture)
-2. [Database Schema & Models](#database-schema--models)
-3. [Entity Relationship Diagram](#entity-relationship-diagram)
-4. [API Modules](#api-modules)
-5. [Analytics & Competitive Intelligence Module](#analytics--competitive-intelligence-module)
-6. [Component Design](#component-design)
-7. [Setup & Installation](#setup--installation)
-8. [Environment Configuration](#environment-configuration)
-9. [API Endpoints](#api-endpoints)
-10. [Authentication & Authorization](#authentication--authorization)
-11. [Error Handling](#error-handling)
-12. [Data Models Details](#data-models-details)
+2. [API Docs Folder](#api-docs-folder)
+3. [Database Schema & Models](#database-schema--models)
+4. [Entity Relationship Diagram](#entity-relationship-diagram)
+5. [API Modules](#api-modules)
+6. [Analytics & Competitive Intelligence Module](#analytics--competitive-intelligence-module)
+7. [Component Design](#component-design)
+8. [Setup & Installation](#setup--installation)
+9. [Environment Configuration](#environment-configuration)
+10. [API Endpoints](#api-endpoints)
+11. [Authentication & Authorization](#authentication--authorization)
+12. [Error Handling](#error-handling)
+13. [Data Models Details](#data-models-details)
 
 ---
 
@@ -95,6 +96,29 @@ A production-ready, multi-tenant backend system for an ethnic fashion e-commerce
 | **Password Hashing** | Argon2id | Secure password storage |
 | **Logging** | Pino | Structured JSON logging |
 | **Security** | Helmet, CORS, Rate Limiting | Security headers & protection |
+
+---
+
+## API Docs Folder
+
+Detailed, implementation-aligned API documentation is available under:
+
+- `docs/api/README.md` - API docs entry point
+- `docs/api/endpoints.md` - endpoint-by-endpoint contract reference
+- `docs/api/responses.md` - detailed success payloads and data shapes
+- `docs/api/errors.md` - standardized errors and failure cases
+- `docs/api/openapi.json` - OpenAPI 3.0 spec for Swagger UI
+
+Swagger runtime endpoints:
+
+- `GET /api-docs` - interactive API explorer
+- `GET /api-docs.json` - raw OpenAPI spec served by backend
+
+DevOps documentation:
+
+- `docs/devops/CI_CD.md` - CI and CD workflow behavior, tags, and setup
+
+Use this folder as the primary integration contract for frontend and QA work.
 
 ---
 

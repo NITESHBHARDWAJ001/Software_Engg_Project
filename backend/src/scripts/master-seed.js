@@ -49,6 +49,16 @@ const upsertUser = async ({ email, password, firstName, lastName, role, organiza
 const ensureSubscriptionPlans = async (superAdminId) => {
   const plans = [
     {
+      code: 'FREE',
+      name: 'Free',
+      description: 'Default onboarding plan for newly joined organizations.',
+      billingCycle: 'MONTHLY',
+      price: 0,
+      currency: 'INR',
+      features: FEATURES_BASIC,
+      limits: { users: 2, inventoryItems: 500, customers: 200, exhibitions: 2 },
+    },
+    {
       code: 'BASIC',
       name: 'Basic',
       description: 'Core modules for customer and inventory.',

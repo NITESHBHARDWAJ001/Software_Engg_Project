@@ -24,6 +24,7 @@ import Dashboard from './app/modules/dashboard/Dashboard.tsx';
 import TasksPage from './app/modules/tasks/TasksPage.tsx';
 import ExhibitionsPage from './app/modules/exhibitions/ExhibitionsPage.tsx';
 import CustomersPage from './app/modules/customers/CustomersPage.tsx';
+import EmployeesPage from './app/modules/users/EmployeesPage.tsx';
 import InventoryPage from './app/modules/inventory/InventoryPage.tsx';
 import FinancePage from './app/modules/finance/FinancePage.tsx';
 import AnalyticsPage from './app/modules/analytics/AnalyticsPage.tsx';
@@ -94,6 +95,7 @@ function App() {
           <Route path="tasks/*" element={<TasksPage />} />
           <Route path="exhibitions/*" element={<ExhibitionsPage />} />
           <Route path="customers/*" element={<CustomersPage />} />
+          <Route path="employees" element={<EmployeesPage />} />
           <Route path="inventory/*" element={<InventoryPage />} />
           <Route path="finance/*" element={<FinancePage />} />
           <Route path="analytics" element={<AnalyticsPage />} />

@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+<<<<<<< HEAD
+=======
+enum Role {
+  SUPER_ADMIN
+  ORG_ADMIN
+  STAFF
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  TEMPORARY
+}
+
+>>>>>>> cc26435025cde8bc5c02e3521842dfd16923932e
 model Organization {
   id              String                     @id @default(uuid())
   name            String
@@ -45,6 +62,29 @@ model User {
   createdTasks            Task[]            @relation("TaskCreatedBy")
   taskComments            TaskComment[]
   organization            Organization?     @relation(fields: [organizationId], references: [id])
+  id             String          @id @default(uuid())
+  email          String          @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  phone          String?
+  jobTitle       String?
+  employmentType EmploymentType?
+  employmentValidFrom DateTime?
+  employmentValidTo DateTime?
+  role           Role            @default(STAFF)
+  isActive       Boolean         @default(true)
+  organizationId String?
+  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  refreshSessions RefreshSession[]
+  createdTasks   Task[]          @relation("TaskCreatedBy")
+  assignedTasks  Task[]          @relation("TaskAssignedTo")
+  taskComments   TaskComment[]
+  createdExhibitions Exhibition[] @relation("ExhibitionCreatedBy")
+  capturedExhibitionLeads ExhibitionLead[] @relation("ExhibitionLeadCapturedBy")
+  leadInteractions LeadInteraction[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([organizationId])
   @@index([role])

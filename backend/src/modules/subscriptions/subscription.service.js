@@ -1,8 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../shared/db/prisma.js';
 import { HttpError } from '../../shared/http/httpError.js';
 
 const ACTIVE_STATES = ['TRIALING', 'ACTIVE', 'PAST_DUE'];
+const FREE_PLAN_CODE = 'FREE';
+const FREE_PLAN_FEATURES = ['CUSTOMER_MANAGEMENT', 'INVENTORY_MANAGEMENT'];
 
 const toNumber = (value) => Number(value ?? 0);
 
@@ -35,6 +38,60 @@ const resolveEffectiveFeatures = (subscription) => {
 };
 
 export const subscriptionService = {
+  async ensureFreePlan(userId) {
+    const actorId = userId ?? 'SYSTEM';
+    const plan = await prisma.subscriptionPlan.upsert({
+      where: { code: FREE_PLAN_CODE },
+      update: {
+        name: 'Free',
+        description: 'Default onboarding plan for newly joined organizations.',
+        billingCycle: 'MONTHLY',
+        price: new Prisma.Decimal(0),
+        currency: 'INR',
+        isActive: true,
+        updatedBy: actorId,
+      },
+      create: {
+        name: 'Free',
+        code: FREE_PLAN_CODE,
+        description: 'Default onboarding plan for newly joined organizations.',
+        billingCycle: 'MONTHLY',
+        price: new Prisma.Decimal(0),
+        currency: 'INR',
+        isActive: true,
+        features: FREE_PLAN_FEATURES,
+        limits: {
+          maxUsers: 2,
+          maxExhibitions: 2,
+          maxCustomers: 200,
+          maxInventoryItems: 500,
+        },
+        createdBy: actorId,
+        updatedBy: actorId,
+      },
+    });
+
+    return mapPlan(plan);
+  },
+
+  async assignDefaultFreePlan(organizationId, userId) {
+    const freePlan = await this.ensureFreePlan(userId);
+    return this.assignPlanToOrganization(organizationId, userId, {
+      planId: freePlan.id,
+      status: 'ACTIVE',
+      startDate: new Date(),
+      endDate: undefined,
+      trialEndsAt: undefined,
+      autoRenew: true,
+      seats: 2,
+      includedFeatures: [],
+      excludedFeatures: [],
+      metadata: {
+        onboarding: 'DEFAULT_FREE_PLAN',
+      },
+    });
+  },
+
   async listPlans(activeOnly = false) {
     const plans = await prisma.subscriptionPlan.findMany({
       where: activeOnly ? { isActive: true } : {},
@@ -281,5 +338,135 @@ export const subscriptionService = {
     }
 
     return current.effectiveFeatures.includes(featureKey);
+  },
+
+  async mockCheckoutAndActivate(organizationId, userId, payload) {
+    const [organization, plan] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: organizationId } }),
+      prisma.subscriptionPlan.findUnique({ where: { id: payload.planId } }),
+    ]);
+
+    if (!organization) {
+      throw new HttpError(404, 'Organization not found', 'ORG_NOT_FOUND');
+    }
+    if (!plan) {
+      throw new HttpError(404, 'Subscription plan not found', 'PLAN_NOT_FOUND');
+    }
+    if (!plan.isActive) {
+      throw new HttpError(400, 'Cannot checkout inactive subscription plan', 'PLAN_INACTIVE');
+    }
+
+    const baseAmount = toNumber(plan.price);
+    const offerType = payload.offer?.type;
+    const offerValue = payload.offer?.value ?? 0;
+    const computedDiscount = offerType === 'PERCENTAGE'
+      ? Math.min(baseAmount, (baseAmount * offerValue) / 100)
+      : Math.min(baseAmount, offerValue);
+    const finalAmount = Math.max(0, baseAmount - computedDiscount);
+
+    let activatedSubscription = null;
+    if (payload.activateNow) {
+      activatedSubscription = await this.assignPlanToOrganization(organizationId, userId, {
+        planId: payload.planId,
+        status: 'ACTIVE',
+        startDate: new Date(),
+        endDate: undefined,
+        trialEndsAt: undefined,
+        autoRenew: true,
+        seats: undefined,
+        includedFeatures: [],
+        excludedFeatures: [],
+        metadata: {
+          checkoutMode: 'MOCK',
+          paymentMethod: payload.paymentMethod,
+          offerCode: payload.offer?.code,
+          offerTitle: payload.offer?.title,
+          notes: payload.notes,
+        },
+      });
+    }
+
+    return {
+      transactionId: `MOCK-${randomUUID().slice(0, 8).toUpperCase()}`,
+      mode: 'MOCK',
+      paymentStatus: 'PAID',
+      paymentMethod: payload.paymentMethod,
+      organizationId,
+      plan: mapPlan(plan),
+      invoice: {
+        currency: plan.currency,
+        amount: baseAmount,
+        discountAmount: computedDiscount,
+        finalAmount,
+      },
+      offerApplied: payload.offer
+        ? {
+            code: payload.offer.code,
+            title: payload.offer.title,
+            type: payload.offer.type,
+            value: payload.offer.value,
+          }
+        : null,
+      activatedSubscription,
+      processedAt: new Date(),
+      message: 'Mock payment successful',
+    };
+  },
+
+  async listOrganizationsOnPlan(planId, includeInactive = false) {
+    const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+    if (!plan) {
+      throw new HttpError(404, 'Subscription plan not found', 'PLAN_NOT_FOUND');
+    }
+
+    const subscriptions = await prisma.organizationSubscription.findMany({
+      where: {
+        planId,
+        ...(includeInactive ? {} : { status: { in: ACTIVE_STATES } }),
+      },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            email: true,
+            phone: true,
+            createdAt: true,
+            updatedAt: true,
+            _count: {
+              select: {
+                users: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    return subscriptions.map((row) => ({
+      subscriptionId: row.id,
+      organizationId: row.organizationId,
+      planId: row.planId,
+      status: row.status,
+      startDate: row.startDate,
+      endDate: row.endDate,
+      trialEndsAt: row.trialEndsAt,
+      autoRenew: row.autoRenew,
+      seats: row.seats,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      organization: {
+        id: row.organization.id,
+        name: row.organization.name,
+        slug: row.organization.slug,
+        email: row.organization.email,
+        phone: row.organization.phone,
+        totalUsers: row.organization._count.users,
+        createdAt: row.organization.createdAt,
+        updatedAt: row.organization.updatedAt,
+      },
+    }));
   },
 };
