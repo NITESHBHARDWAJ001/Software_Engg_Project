@@ -4,7 +4,8 @@ import logging
 import datetime
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.models import Competitor, Product, ProductPriceHistory
+from app.models.models import Competitor, Product, ProductPriceHistory, SocialPostSentiment
+from app.services.sentiment_analysis import analyze_text_sentiment
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +117,8 @@ def extract_products(soup, url):
         
     return products
 
-async def scrape_competitor_data(url: str, db: AsyncSession):
-    logger.info(f"Scraping data from {url}")
+async def scrape_competitor_data(url: str, org_id: str, db: AsyncSession):
+    logger.info(f"[{org_id}] Scraping data from {url}")
     
     # Run the playwright sequence in a separate thread safely
     content, error = await asyncio.to_thread(_scrape_sync, url)
@@ -134,14 +135,52 @@ async def scrape_competitor_data(url: str, db: AsyncSession):
     except Exception:
         domain = url[:250]
         
-    # Check if competitor exists securely to avoid duplicate constraint failures
-    existing_competitor = await db.execute(select(Competitor).where(Competitor.url == domain))
+    # Check if competitor exists for THIS TENANT securely
+    existing_competitor = await db.execute(select(Competitor).where(Competitor.url == domain, Competitor.org_id == org_id))
     competitor = existing_competitor.scalars().first()
     
     if not competitor:
-        competitor = Competitor(name=domain, url=domain)
+        competitor = Competitor(name=domain, url=domain, org_id=org_id)
         db.add(competitor)
         await db.flush()
+        
+    # --- SOCIAL MEDIA SENTIMENT BRANCH ---
+    if "instagram.com" in domain or "twitter.com" in domain or "facebook.com" in domain:
+        # Heavily target meta descriptions which usually hold full post captions without JS rendering
+        meta_desc = soup.find("meta", property="og:description")
+        raw_text = meta_desc.get("content", "") if meta_desc else soup.get_text(separator=' ', strip=True)[:1000]
+        
+        # Analyze
+        sentiment_data = analyze_text_sentiment(raw_text)
+        
+        # Upsert: Update if it exists under this specific competitor, otherwise create new
+        existing_sentiment_result = await db.execute(select(SocialPostSentiment).where(
+            SocialPostSentiment.post_url == url[:500],
+            SocialPostSentiment.competitor_id == competitor.id
+        ))
+        sentiment_entry = existing_sentiment_result.scalars().first()
+        
+        if sentiment_entry:
+            sentiment_entry.content_text = raw_text[:1000]
+            sentiment_entry.sentiment_score = sentiment_data["score"]
+            sentiment_entry.sentiment_label = sentiment_data["label"]
+            sentiment_entry.analyzed_at = datetime.datetime.utcnow()
+        else:
+            sentiment_entry = SocialPostSentiment(
+                competitor_id=competitor.id,
+                post_url=url[:500],
+                content_text=raw_text[:1000],
+                sentiment_score=sentiment_data["score"],
+                sentiment_label=sentiment_data["label"]
+            )
+            db.add(sentiment_entry)
+            
+        await db.commit()
+        
+        return {"url": url, "type": "social_post", "sentiment": sentiment_data, "status": "success"}
+
+    # --- STANDARD E-COMMERCE PRODUCT BRANCH ---
+    extracted_products = extract_products(soup, url)
     
     for pd in extracted_products:
         # Avoid duplicate product URLs if same competitor

@@ -1,7 +1,15 @@
 export const APP_NAME = 'OperIQ';
 export const APP_DESCRIPTION = 'Comprehensive business management platform by OperIQ';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+// In dev mode, use relative path for Vite proxy (no CORS issues)
+// In prod, use env var or fallback to /api
+export const API_BASE_URL = import.meta.env.DEV 
+  ? '/api'
+  : (import.meta.env.VITE_API_BASE_URL || '/api');
+
+if (typeof window !== 'undefined') {
+  console.log('[constants] API_BASE_URL:', API_BASE_URL, 'VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+}
 
 export const ROUTES = {
   // Marketing

@@ -17,10 +17,10 @@ import {
   socialMediaService,
   SocialReel,
   Comment,
-  Competitor,
   Campaign,
   SentimentType,
 } from '../../../services/mock/socialMediaService';
+import { realAnalyticsService } from '../../../services/api/analyticsService';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { formatCurrency, formatDate, getRelativeTime } from '../../../utils/helpers';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
@@ -34,8 +34,6 @@ import {
   Cell,
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -55,20 +53,27 @@ const AnalyticsPage: React.FC = () => {
   const [reels, setReels] = useState<SocialReel[]>([]);
   const [sentimentData, setSentimentData] = useState<any>(null);
   const [sentimentTrend, setSentimentTrend] = useState<any[]>([]);
-  const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [engagementStats, setEngagementStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'reels' | 'sentiment' | 'competitors' | 'campaigns'>(
     'reels'
   );
+  
+  // Real AI States
+  const [aiReport, setAiReport] = useState<any>(null);
+  const [scrapeUrl, setScrapeUrl] = useState('');
+  const [isScraping, setIsScraping] = useState(false);
 
   useEffect(() => {
     loadAllData();
   }, [currentOrganization?.id]);
 
   const loadAllData = async () => {
-    if (!currentOrganization?.id) return;
+    if (!currentOrganization?.id) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -76,28 +81,45 @@ const AnalyticsPage: React.FC = () => {
         reelsData,
         sentimentAnalysis,
         sentimentTrendData,
-        competitorsData,
         campaignsData,
         engagementData,
+        aiReportData
       ] = await Promise.all([
-        socialMediaService.getAllReels(currentOrganization.id),
-        socialMediaService.getSentimentAnalysis(currentOrganization.id),
+        socialMediaService.getAllReels('org-1'),
+        socialMediaService.getSentimentAnalysis('org-1'),
         socialMediaService.getSentimentTrend(),
-        socialMediaService.getCompetitors(),
-        socialMediaService.getCampaigns(currentOrganization.id),
-        socialMediaService.getEngagementStats(currentOrganization.id),
+        socialMediaService.getCampaigns('org-1'),
+        socialMediaService.getEngagementStats('org-1'),
+        realAnalyticsService.getAiReport().catch(() => null),
       ]);
 
       setReels(reelsData);
       setSentimentData(sentimentAnalysis);
       setSentimentTrend(sentimentTrendData);
-      setCompetitors(competitorsData);
       setCampaigns(campaignsData);
       setEngagementStats(engagementData);
+      if (aiReportData) setAiReport(aiReportData);
     } catch (error) {
       console.error('Failed to load social media data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleScrape = async () => {
+    if (!scrapeUrl) return;
+    setIsScraping(true);
+    try {
+      await realAnalyticsService.triggerScrape(scrapeUrl);
+      const report = await realAnalyticsService.getAiReport('test-org');
+      setAiReport(report);
+      setScrapeUrl('');
+    } catch (e) {
+      console.error('[handleScrape] Error:', e);
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to scrape competitor: ${errorMsg}`);
+    } finally {
+      setIsScraping(false);
     }
   };
 
@@ -577,112 +599,49 @@ const AnalyticsPage: React.FC = () => {
       {activeTab === 'competitors' && (
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Competitor Comparison" />
+            <CardHeader title="AI Competitor Intelligence Tracker" />
             <CardContent className="p-6">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Brand</th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-700">
-                        Followers
-                      </th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-700">
-                        Engagement
-                      </th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-700">
-                        Posts/Week
-                      </th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-700">
-                        Avg Likes
-                      </th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-700">
-                        Avg Comments
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {competitors.map((competitor) => (
-                      <tr
-                        key={competitor.id}
-                        className={`border-b hover:bg-gray-50 ${
-                          competitor.name === 'Your Brand' ? 'bg-primary/5' : ''
-                        }`}
-                      >
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900">
-                              {competitor.name}
-                            </span>
-                            {competitor.name === 'Your Brand' && (
-                              <Badge variant="primary">You</Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="text-center py-3 px-4 text-gray-900">
-                          {formatNumber(competitor.followers)}
-                        </td>
-                        <td className="text-center py-3 px-4">
-                          <Badge
-                            variant={
-                              competitor.avgEngagementRate > 7
-                                ? 'success'
-                                : competitor.avgEngagementRate > 5
-                                ? 'warning'
-                                : 'info'
-                            }
-                          >
-                            {competitor.avgEngagementRate.toFixed(1)}%
-                          </Badge>
-                        </td>
-                        <td className="text-center py-3 px-4 text-gray-900">
-                          {competitor.postsPerWeek}
-                        </td>
-                        <td className="text-center py-3 px-4 text-gray-900">
-                          {formatNumber(competitor.avgLikes)}
-                        </td>
-                        <td className="text-center py-3 px-4 text-gray-900">
-                          {formatNumber(competitor.avgComments)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              
+              <div className="flex gap-4 mb-6">
+                <input
+                  type="text"
+                  placeholder="https://instagram.com/competitor_brand or boutique-website.com"
+                  className="flex-1 w-full p-2 border border-gray-300 rounded focus:ring-primary focus:border-primary"
+                  value={scrapeUrl}
+                  onChange={(e) => setScrapeUrl(e.target.value)}
+                  disabled={isScraping}
+                />
+                <Button variant="primary" onClick={handleScrape} disabled={isScraping || !scrapeUrl}>
+                  {isScraping ? <><Spinner size="sm"/> &nbsp; Analyzing Strategy...</> : <><FiActivity className="w-4 h-4 mr-2" /> Hack Strategy</>}
+                </Button>
               </div>
+
+              {aiReport?.data?.executive_summary ? (
+                <div className="bg-primary/5 p-6 rounded-lg mb-6 border border-primary/20">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center">
+                    <FiTarget className="w-6 h-6 mr-2 text-primary" /> Groq AI Executive Summary
+                  </h3>
+                  <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{aiReport.data.executive_summary}</p>
+                </div>
+              ) : (
+                <div className="bg-gray-50 p-6 rounded-lg mb-6 text-center text-gray-500">
+                  <FiUsers className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  No intelligence reports generated yet. Enter a competitor URL above to launch the LLaMA-based scraper engine.
+                </div>
+              )}
+
+              {aiReport?.data?.analysis?.insights && (
+                 <div>
+                   <h4 className="text-lg font-semibold text-gray-800 mb-3 border-b pb-2">Catalog Pricing Analytics</h4>
+                   <ul className="space-y-2 list-disc list-inside text-gray-700">
+                      {aiReport.data.analysis.insights.map((insight: string, idx: number) => (
+                         <li key={idx} className="bg-gray-50 p-2 rounded">{insight}</li>
+                      ))}
+                   </ul>
+                 </div>
+              )}
             </CardContent>
           </Card>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader title="Followers Comparison" />
-              <CardContent className="p-6">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={competitors}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-                    <YAxis tickFormatter={(value) => formatNumber(value)} />
-                    <Tooltip formatter={(value) => formatNumber(value as number)} />
-                    <Bar dataKey="followers" fill="#7B2CBF" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader title="Engagement Rate Comparison" />
-              <CardContent className="p-6">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={competitors}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `${(value as number).toFixed(2)}%`} />
-                    <Bar dataKey="avgEngagementRate" fill="#D4AF37" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       )}
 

@@ -6,9 +6,9 @@ from app.models.models import Competitor, Product, ProductPriceHistory
 
 logger = logging.getLogger(__name__)
 
-async def analyze_competitors(db: AsyncSession):
-    logger.info("Analyzing competitor data from database...")
-    stmt = select(Product).options(selectinload(Product.competitor), selectinload(Product.price_history))
+async def analyze_competitors(db: AsyncSession, org_id: str):
+    logger.info(f"[{org_id}] Analyzing competitor data from database...")
+    stmt = select(Product).join(Competitor).where(Competitor.org_id == org_id).options(selectinload(Product.competitor), selectinload(Product.price_history))
     result = await db.execute(stmt)
     products = result.scalars().all()
     
