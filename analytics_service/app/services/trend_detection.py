@@ -2,15 +2,15 @@ import logging
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.models.models import ProductPriceHistory, Product
+from app.models.models import ProductPriceHistory, Product, Competitor
 
 logger = logging.getLogger(__name__)
 
-async def detect_trends(db: AsyncSession):
-    logger.info("Detecting trends using historical data...")
+async def detect_trends(db: AsyncSession, org_id: str):
+    logger.info(f"[{org_id}] Detecting trends using historical data...")
     
-    # fetch historical data
-    stmt = select(ProductPriceHistory.price, ProductPriceHistory.recorded_at, Product.category, Product.name).join(Product)
+    # fetch historical data scoped to tenant
+    stmt = select(ProductPriceHistory.price, ProductPriceHistory.recorded_at, Product.category, Product.name).join(Product).join(Competitor).where(Competitor.org_id == org_id)
     result = await db.execute(stmt)
     records = result.all()
     

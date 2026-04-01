@@ -15,6 +15,7 @@ import { organizationRouter } from './modules/organizations/organization.routes.
 import { taskRouter } from './modules/tasks/tasks.routes.js';
 import { exhibitionsRouter } from './modules/exhibitions/exhibitions.routes.js';
 import { subscriptionRouter } from './modules/subscriptions/subscription.routes.js';
+import { analyticsRouter } from './modules/analytics/analytics.routes.js';
 import { requestContext } from './shared/middleware/requestContext.js';
 import { notFoundHandler } from './shared/middleware/notFound.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
@@ -49,6 +50,7 @@ app.use('/api/v1/organizations', organizationRouter);
 app.use('/api/v1/tasks', taskRouter);
 app.use('/api/v1/exhibitions', exhibitionsRouter);
 app.use('/api/v1/subscriptions', subscriptionRouter);
+app.use('/api/v1/analytics', analyticsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

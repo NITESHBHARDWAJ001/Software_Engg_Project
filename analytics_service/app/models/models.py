@@ -6,9 +6,11 @@ from app.db.database import Base
 class Competitor(Base):
     __tablename__ = "competitors"
     id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(String, index=True)
     name = Column(String, index=True)
-    url = Column(String, unique=True)
+    url = Column(String)
     products = relationship("Product", back_populates="competitor")
+    social_posts = relationship("SocialPostSentiment", back_populates="competitor", cascade="all, delete-orphan")
 
 class Product(Base):
     __tablename__ = "products"
@@ -35,5 +37,18 @@ class ProductPriceHistory(Base):
 class TrendReport(Base):
     __tablename__ = "trend_reports"
     id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(String, index=True)
     generated_at = Column(DateTime, default=datetime.datetime.utcnow)
     report_data = Column(JSON)
+
+class SocialPostSentiment(Base):
+    __tablename__ = "social_post_sentiments"
+    id = Column(Integer, primary_key=True, index=True)
+    competitor_id = Column(Integer, ForeignKey("competitors.id"))
+    post_url = Column(String)
+    content_text = Column(Text)
+    sentiment_score = Column(Float)
+    sentiment_label = Column(String)
+    analyzed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    competitor = relationship("Competitor", back_populates="social_posts")
