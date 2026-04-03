@@ -20,7 +20,7 @@ import {
   Campaign,
   SentimentType,
 } from '../../../services/mock/socialMediaService';
-import { realAnalyticsService } from '../../../services/api/analyticsService';
+import { analyticsService } from '../../../services/api/analyticsService';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { formatCurrency, formatDate, getRelativeTime } from '../../../utils/helpers';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
@@ -90,7 +90,7 @@ const AnalyticsPage: React.FC = () => {
         socialMediaService.getSentimentTrend(),
         socialMediaService.getCampaigns('org-1'),
         socialMediaService.getEngagementStats('org-1'),
-        realAnalyticsService.getAiReport().catch(() => null),
+        analyticsService.getAiReport().catch(() => null),
       ]);
 
       setReels(reelsData);
@@ -110,8 +110,8 @@ const AnalyticsPage: React.FC = () => {
     if (!scrapeUrl) return;
     setIsScraping(true);
     try {
-      await realAnalyticsService.triggerScrape(scrapeUrl);
-      const report = await realAnalyticsService.getAiReport('test-org');
+      await analyticsService.triggerScrape(scrapeUrl);
+      const report = await analyticsService.getAiReport('test-org');
       setAiReport(report);
       setScrapeUrl('');
     } catch (e) {

@@ -1,0 +1,361 @@
+openapi: 3.0.3
+info:
+  title: Analytics Service API
+  version: '1.0.0'
+  description: OpenAPI specification for the Analytics microservice (scraping, analysis, trends, reports)
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development server (prefix `/api/v1`)
+
+paths:
+  /:
+    get:
+      summary: Root
+      description: Service root message
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /scrape:
+    post:
+      summary: Trigger scraping of a competitor URL
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                org_id:
+                  type: string
+      responses:
+        '200':
+          description: Scrape completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  data:
+                    type: object
+
+  /analyze:
+    post:
+      summary: Run competitor analysis pipeline
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Analysis completed
+
+  /trends:
+    get:
+      summary: Detect trends for an organization
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Trends result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /report:
+    post:
+      summary: Generate combined analysis + trends report
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Report generated
+
+  /analyze-sentiment:
+    post:
+      summary: Run social media sentiment analysis for a URL
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+      responses:
+        '200':
+          description: Sentiment executed
+
+  /generate-ad-copy:
+    post:
+      summary: Generate defensive ad copy using AI
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                competitor_domain:
+                  type: string
+      responses:
+        '200':
+          description: AI ad copy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  competitor_targeted:
+                    type: string
+                  negative_weaknesses_analyzed:
+                    type: integer
+                  ai_ad_copy:
+                    type: string
+
+  /dashboard/competitors:
+    get:
+      summary: Competitors summary for dashboard
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Competitors list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CompetitorSummary'
+
+  /dashboard/competitors/{competitor_id}:
+    get:
+      summary: Competitor details
+      parameters:
+        - in: path
+          name: competitor_id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Competitor details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+
+  /dashboard/pricing-trends:
+    get:
+      summary: Pricing trends over N days
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Pricing trends
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /dashboard/sentiment:
+    get:
+      summary: Sentiment breakdown
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Sentiment counts and percentages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                  total:
+                    type: integer
+                  percentages:
+                    type: object
+
+  /dashboard/insights:
+    get:
+      summary: Top AI insights
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Latest insights
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Insight'
+
+  /dashboard/products:
+    get:
+      summary: Paginated products for dashboard
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  pagination:
+                    type: object
+
+components:
+  schemas:
+    CompetitorSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        url:
+          type: string
+        product_count:
+          type: integer
+        avg_price:
+          type: number
+        last_scraped:
+          type: string
+          format: date-time
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+        price:
+          type: number
+        currency:
+          type: string
+        image_url:
+          type: string
+        competitor:
+          type: string
+
+    Insight:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        summary:
+          type: string
