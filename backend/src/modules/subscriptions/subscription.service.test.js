@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { prismaMock } = vi.hoisted(() => ({
   prismaMock: {
     subscriptionPlan: {
+      count: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -30,12 +31,14 @@ describe('subscriptionService', () => {
   });
 
   it('lists plans with numeric price conversion', async () => {
+    prismaMock.subscriptionPlan.count.mockResolvedValue(1);
     prismaMock.subscriptionPlan.findMany.mockResolvedValue([
       { id: 'p1', price: { toString: () => '999' } },
     ]);
 
-    const plans = await subscriptionService.listPlans(true);
-    expect(plans[0].price).toBe(999);
+    const result = await subscriptionService.listPlans(true);
+    expect(result.total).toBe(1);
+    expect(result.plans[0].price).toBe(999);
   });
 
   it('throws on duplicate plan code', async () => {

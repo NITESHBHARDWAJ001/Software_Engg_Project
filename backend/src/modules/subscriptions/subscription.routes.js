@@ -3,7 +3,7 @@ import { authGuard } from '../../shared/middleware/auth.js';
 import { allowRoles } from '../../shared/middleware/rbac.js';
 import { getOrganizationScope, tenantGuard } from '../../shared/middleware/tenant.js';
 import { HttpError } from '../../shared/http/httpError.js';
-import { ok } from '../../shared/http/response.js';
+import { ok, paged } from '../../shared/http/response.js';
 import {
   mockCheckoutSchema,
   organizationSubscriptionCreateSchema,
@@ -24,8 +24,8 @@ subscriptionRouter.use(authGuard, tenantGuard);
 
 subscriptionRouter.get('/plans', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const query = planListQuerySchema.parse(req.query);
-  const plans = await subscriptionService.listPlans(query.activeOnly);
-  res.json(ok(plans));
+  const { plans, total } = await subscriptionService.listPlans(query.activeOnly, query.page, query.pageSize);
+  res.json(paged(plans, query.page, query.pageSize, total));
 });
 
 subscriptionRouter.post('/plans', allowRoles(SUPER_ADMIN), async (req, res) => {
@@ -51,8 +51,13 @@ subscriptionRouter.delete('/plans/:planId', allowRoles(SUPER_ADMIN), async (req,
 subscriptionRouter.get('/plans/:planId/organizations', allowRoles(SUPER_ADMIN), async (req, res) => {
   const planId = Array.isArray(req.params.planId) ? req.params.planId[0] : req.params.planId;
   const query = planOrganizationsQuerySchema.parse(req.query);
-  const organizations = await subscriptionService.listOrganizationsOnPlan(planId, query.includeInactive);
-  res.json(ok(organizations));
+  const { organizations, total } = await subscriptionService.listOrganizationsOnPlan(
+    planId,
+    query.includeInactive,
+    query.page,
+    query.pageSize,
+  );
+  res.json(paged(organizations, query.page, query.pageSize, total));
 });
 
 subscriptionRouter.get('/organizations/:organizationId/current', allowRoles(SUPER_ADMIN), async (req, res) => {
