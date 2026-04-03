@@ -107,12 +107,14 @@ Detailed, implementation-aligned API documentation is available under:
 - `docs/api/endpoints.md` - endpoint-by-endpoint contract reference
 - `docs/api/responses.md` - detailed success payloads and data shapes
 - `docs/api/errors.md` - standardized errors and failure cases
-- `docs/api/openapi.json` - OpenAPI 3.0 spec for Swagger UI
+- `docs/api/swagger.yml` - source OpenAPI 3.0 spec for Swagger UI
+- `docs/api/openapi.json` - legacy JSON OpenAPI spec snapshot
 
 Swagger runtime endpoints:
 
 - `GET /api-docs` - interactive API explorer
 - `GET /api-docs.json` - raw OpenAPI spec served by backend
+- `GET /api-docs.yaml` - raw OpenAPI YAML spec served by backend
 
 DevOps documentation:
 

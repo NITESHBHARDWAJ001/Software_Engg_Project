@@ -5,7 +5,7 @@ import { authGuard } from '../../shared/middleware/auth.js';
 import { allowRoles } from '../../shared/middleware/rbac.js';
 import { tenantGuard } from '../../shared/middleware/tenant.js';
 import { prisma } from '../../shared/db/prisma.js';
-import { ok } from '../../shared/http/response.js';
+import { ok, paged } from '../../shared/http/response.js';
 import { HttpError } from '../../shared/http/httpError.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
@@ -21,6 +21,11 @@ const createOrganizationSchema = z.object({
   adminName: z.string().min(2),
   adminEmail: z.string().email(),
   adminPassword: z.string().min(8),
+});
+
+const organizationListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 const normalizeSlug = (value) =>
@@ -76,19 +81,25 @@ const ensureFreePlan = async (tx, actorId) => {
 export const organizationRouter = Router();
 organizationRouter.use(authGuard, tenantGuard);
 
-organizationRouter.get('/', allowRoles(SUPER_ADMIN), async (_req, res) => {
-  const organizations = await prisma.organization.findMany({
-    include: {
-      _count: {
-        select: {
-          users: true,
+organizationRouter.get('/', allowRoles(SUPER_ADMIN), async (req, res) => {
+  const query = organizationListQuerySchema.parse(req.query);
+  const [total, organizations] = await Promise.all([
+    prisma.organization.count(),
+    prisma.organization.findMany({
+      include: {
+        _count: {
+          select: {
+            users: true,
+          },
         },
       },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+      orderBy: { createdAt: 'desc' },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    }),
+  ]);
 
-  res.json(ok(organizations.map((org) => ({
+  res.json(paged(organizations.map((org) => ({
     id: org.id,
     name: org.name,
     slug: org.slug,
@@ -97,7 +108,7 @@ organizationRouter.get('/', allowRoles(SUPER_ADMIN), async (_req, res) => {
     totalUsers: org._count.users,
     createdAt: org.createdAt,
     updatedAt: org.updatedAt,
-  }))));
+  })), query.page, query.pageSize, total));
 });
 
 organizationRouter.post('/', allowRoles(SUPER_ADMIN), async (req, res) => {

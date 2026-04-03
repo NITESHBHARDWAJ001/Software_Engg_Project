@@ -7,7 +7,7 @@ import { pinoHttp } from 'pino-http';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
-import { getOpenApiSpec } from './docs/openapi.js';
+import { getOpenApiSpec, getOpenApiSpecRaw } from './docs/openapi.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { customerRouter } from './modules/customers/customer.routes.js';
@@ -62,8 +62,16 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use('/health', healthRouter);
 app.use('/api/v1/auth', authLimiter, authRouter);
+app.use('/api/v1', apiLimiter);
 app.use('/api/v1/customers', customerRouter);
 app.use('/api/v1/inventory', inventoryRouter);
 app.use('/api/v1/finance', financeRouter);
@@ -77,6 +85,9 @@ app.use('/api/v1/analytics', analyticsRouter);
 const openApiSpec = getOpenApiSpec();
 app.get('/api-docs.json', (_req, res) => {
   res.json(openApiSpec);
+});
+app.get('/api-docs.yaml', (_req, res) => {
+  res.type('application/yaml').send(getOpenApiSpecRaw());
 });
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
