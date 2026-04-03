@@ -5,10 +5,14 @@ const subscriptionStatuses = ['TRIALING', 'ACTIVE', 'PAST_DUE', 'CANCELED', 'EXP
 
 export const planListQuerySchema = z.object({
   activeOnly: z.coerce.boolean().default(false),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export const planOrganizationsQuerySchema = z.object({
   includeInactive: z.coerce.boolean().default(false),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export const planCreateSchema = z.object({

@@ -18,7 +18,7 @@ This folder contains production-oriented API documentation for the Ethnic Fashio
 - [Endpoint Reference](./endpoints.md)
 - [Response Models and Examples](./responses.md)
 - [Error Codes and Failure Cases](./errors.md)
-- [OpenAPI Spec (Swagger)](./openapi.json)
+- [OpenAPI Spec (Swagger YAML)](./swagger.yml)
 
 ## Swagger UI
 
@@ -26,8 +26,9 @@ When backend is running, interactive Swagger docs are available at:
 
 - `http://localhost:4000/api-docs`
 - Raw OpenAPI JSON: `http://localhost:4000/api-docs.json`
+- Raw OpenAPI YAML: `http://localhost:4000/api-docs.yaml`
 
-The spec source file is `docs/api/openapi.json`.
+The spec source file is `docs/api/swagger.yml`.
 
 ## Security Model
 

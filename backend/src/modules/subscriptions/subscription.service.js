@@ -92,13 +92,22 @@ export const subscriptionService = {
     });
   },
 
-  async listPlans(activeOnly = false) {
-    const plans = await prisma.subscriptionPlan.findMany({
-      where: activeOnly ? { isActive: true } : {},
-      orderBy: [{ isActive: 'desc' }, { price: 'asc' }, { createdAt: 'asc' }],
-    });
+  async listPlans(activeOnly = false, page = 1, pageSize = 20) {
+    const where = activeOnly ? { isActive: true } : {};
+    const [total, plans] = await Promise.all([
+      prisma.subscriptionPlan.count({ where }),
+      prisma.subscriptionPlan.findMany({
+        where,
+        orderBy: [{ isActive: 'desc' }, { price: 'asc' }, { createdAt: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
-    return plans.map(mapPlan);
+    return {
+      plans: plans.map(mapPlan),
+      total,
+    };
   },
 
   async createPlan(userId, payload) {
@@ -413,39 +422,47 @@ export const subscriptionService = {
     };
   },
 
-  async listOrganizationsOnPlan(planId, includeInactive = false) {
+  async listOrganizationsOnPlan(planId, includeInactive = false, page = 1, pageSize = 20) {
     const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
     if (!plan) {
       throw new HttpError(404, 'Subscription plan not found', 'PLAN_NOT_FOUND');
     }
 
-    const subscriptions = await prisma.organizationSubscription.findMany({
-      where: {
-        planId,
-        ...(includeInactive ? {} : { status: { in: ACTIVE_STATES } }),
-      },
-      include: {
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            email: true,
-            phone: true,
-            createdAt: true,
-            updatedAt: true,
-            _count: {
-              select: {
-                users: true,
+    const where = {
+      planId,
+      ...(includeInactive ? {} : { status: { in: ACTIVE_STATES } }),
+    };
+
+    const [total, subscriptions] = await Promise.all([
+      prisma.organizationSubscription.count({ where }),
+      prisma.organizationSubscription.findMany({
+        where,
+        include: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              email: true,
+              phone: true,
+              createdAt: true,
+              updatedAt: true,
+              _count: {
+                select: {
+                  users: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
-    });
+        orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
-    return subscriptions.map((row) => ({
+    return {
+      organizations: subscriptions.map((row) => ({
       subscriptionId: row.id,
       organizationId: row.organizationId,
       planId: row.planId,
@@ -467,6 +484,8 @@ export const subscriptionService = {
         createdAt: row.organization.createdAt,
         updatedAt: row.organization.updatedAt,
       },
-    }));
+      })),
+      total,
+    };
   },
 };
