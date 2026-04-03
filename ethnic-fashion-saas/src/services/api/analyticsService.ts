@@ -1,13 +1,11 @@
 import { API_BASE_URL } from '../../utils/constants';
+import mockAnalyticsService from '../../mock/analyticsService';
 
 function getAuthToken(): string | null {
-  // Zustand persist wraps state in { state: { token: '...' } }
-  // so we must parse the JSON stored under the persist key
   try {
     const raw = localStorage.getItem('auth_token');
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Handle both: raw token string OR Zustand persist object
     if (typeof parsed === 'string') return parsed;
     return parsed?.state?.token ?? null;
   } catch {
@@ -66,5 +64,35 @@ export const realAnalyticsService = {
       method: 'POST',
       body: JSON.stringify({ domain }),
     });
+  },
+
+  // Dashboard endpoints
+  async getCompetitorsSummary() {
+    return apiRequest<any>('/v1/analytics/dashboard/competitors?org_id=test-org');
+  },
+
+  async getCompetitorDetails(competitorId: number) {
+    return apiRequest<any>(`/v1/analytics/dashboard/competitors/${competitorId}?org_id=test-org`);
+  },
+
+  async getPricingTrends(days: number = 30) {
+    return apiRequest<any>(`/v1/analytics/dashboard/pricing-trends?org_id=test-org&days=${days}`);
+  },
+
+  async getSentimentBreakdown() {
+    return apiRequest<any>('/v1/analytics/dashboard/sentiment?org_id=test-org');
+  },
+
+  async getTopInsights(limit: number = 5) {
+    return apiRequest<any>(`/v1/analytics/dashboard/insights?org_id=test-org&limit=${limit}`);
+  },
+
+  async getProductsByCategory(page: number = 1, limit: number = 20) {
+    return apiRequest<any>(`/v1/analytics/dashboard/products?org_id=test-org&page=${page}&limit=${limit}`);
   }
 };
+
+// Export a selectable service: use mock when VITE_USE_MOCK_ANALYTICS === 'true'
+export const analyticsService = (import.meta.env?.VITE_USE_MOCK_ANALYTICS === 'true')
+  ? mockAnalyticsService
+  : realAnalyticsService;
