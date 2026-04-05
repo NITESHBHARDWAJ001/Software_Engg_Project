@@ -7,8 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-<<<<<<< HEAD
-=======
 enum Role {
   SUPER_ADMIN
   ORG_ADMIN
@@ -23,7 +21,6 @@ enum EmploymentType {
   TEMPORARY
 }
 
->>>>>>> cc26435025cde8bc5c02e3521842dfd16923932e
 model Organization {
   id              String                     @id @default(uuid())
   name            String
