@@ -23,6 +23,48 @@ export class AnalyticsService {
     if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
     return res.json();
   }
+
+  async getCompetitorsSummary(orgId) {
+    logger.info({ orgId }, 'Integration: Fetching competitors summary');
+    const res = await fetch(`${ANALYTICS_URL}/dashboard/competitors?org_id=${encodeURIComponent(orgId)}`);
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async getPricingTrends(orgId, days = 30) {
+    logger.info({ orgId, days }, 'Integration: Fetching pricing trends');
+    const res = await fetch(`${ANALYTICS_URL}/dashboard/pricing-trends?org_id=${encodeURIComponent(orgId)}&days=${days}`);
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async getSentimentBreakdown(orgId) {
+    logger.info({ orgId }, 'Integration: Fetching sentiment breakdown');
+    const res = await fetch(`${ANALYTICS_URL}/dashboard/sentiment?org_id=${encodeURIComponent(orgId)}`);
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async getTopInsights(orgId, limit = 5) {
+    logger.info({ orgId, limit }, 'Integration: Fetching top insights');
+    const res = await fetch(`${ANALYTICS_URL}/dashboard/insights?org_id=${encodeURIComponent(orgId)}&limit=${limit}`);
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async getProductsByCategory(orgId, page = 1, limit = 20) {
+    logger.info({ orgId, page, limit }, 'Integration: Fetching products by category');
+    const res = await fetch(`${ANALYTICS_URL}/dashboard/products?org_id=${encodeURIComponent(orgId)}&page=${page}&limit=${limit}`);
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async getCompetitorDetails(orgId, competitorId) {
+    logger.info({ orgId, competitorId }, 'Integration: Fetching competitor details');
+    const res = await fetch(`${ANALYTICS_URL}/dashboard/competitors/${competitorId}?org_id=${encodeURIComponent(orgId)}`);
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
 }
 
 export const analyticsService = new AnalyticsService();

@@ -34,3 +34,68 @@ export const generateAdCopy = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getCompetitorsSummary = async (req, res, next) => {
+  try {
+    const orgId = req.query.org_id || req.auth?.organizationId || 'test-org';
+    const result = await analyticsService.getCompetitorsSummary(orgId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCompetitorDetails = async (req, res, next) => {
+  try {
+    const { competitorId } = req.params;
+    const orgId = req.query.org_id || req.auth?.organizationId || 'test-org';
+    const result = await analyticsService.getCompetitorDetails(orgId, competitorId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPricingTrends = async (req, res, next) => {
+  try {
+    const orgId = req.query.org_id || req.auth?.organizationId || 'test-org';
+    const days = parseInt(req.query.days) || 30;
+    const result = await analyticsService.getPricingTrends(orgId, days);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSentimentBreakdown = async (req, res, next) => {
+  try {
+    const orgId = req.query.org_id || req.auth?.organizationId || 'test-org';
+    const result = await analyticsService.getSentimentBreakdown(orgId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTopInsights = async (req, res, next) => {
+  try {
+    const orgId = req.query.org_id || req.auth?.organizationId || 'test-org';
+    const limit = parseInt(req.query.limit) || 5;
+    const result = await analyticsService.getTopInsights(orgId, limit);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getProductsByCategory = async (req, res, next) => {
+  try {
+    const orgId = req.query.org_id || req.auth?.organizationId || 'test-org';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const result = await analyticsService.getProductsByCategory(orgId, page, limit);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
