@@ -159,44 +159,28 @@ jobs:
 
       - name: Deploy to production
         env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
-          # This is a placeholder for your deployment strategy
-          # Options:
-          # 1. Docker Swarm (below)
-          # 2. Kubernetes (use kubectl)
-          # 3. AWS ECS / EKS
-          # 4. DigitalOcean App Platform
-          # 5. Railway / Render / Fly.io
-          
           echo "Deploying backend..."
           echo "Repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "Deployment strategy: Docker Swarm (configure via secrets)"
-          
-          # Example Docker Swarm deployment:
-          if [ ! -z "$DEPLOY_HOST" ]; then
-            mkdir -p ~/.ssh
-            echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
-            chmod 600 ~/.ssh/deploy_key
-            
-            ssh-keyscan -p $DEPLOY_PORT -H $DEPLOY_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
-            
-            ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "cd /opt/app && docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest && docker-compose -f docker-compose.prod.yml up -d && docker-compose exec -T backend npm run prisma:deploy && docker system prune -f"
+          echo "Deployment target: Render"
+
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+            echo "Render deploy hook triggered successfully."
           else
-            echo "DEPLOY_HOST not set. Skipping deployment."
-            echo "Configure GitHub Secrets for deployment in repository settings."
+            echo "RENDER_DEPLOY_HOOK_URL not set. Skipping deploy trigger."
+            echo "Add secret RENDER_DEPLOY_HOOK_URL in repository settings."
           fi
 
       - name: Health check
         continue-on-error: true
+        if: ${{ secrets.RENDER_HEALTHCHECK_URL != '' }}
         run: |
           echo "Running health checks..."
           
           for i in {1..10}; do
-            if curl -f http://${{ secrets.DEPLOY_HOST }}:4000/health/live -m 5; then
+            if curl -f "${{ secrets.RENDER_HEALTHCHECK_URL }}" -m 10; then
               echo "✓ Backend health check passed"
               exit 0
             fi
