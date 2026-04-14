@@ -133,12 +133,7 @@ jobs:
             
             ssh-keyscan -p $DEPLOY_PORT -H $DEPLOY_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
             
-            ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
-              cd /opt/app
-              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-              docker-compose -f docker-compose.prod.yml up -d analytics
-              docker system prune -f
-            EOF
+            ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "cd /opt/app && docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest && docker-compose -f docker-compose.prod.yml up -d analytics && docker system prune -f"
           else
             echo "DEPLOY_HOST not set. Skipping analytics deployment."
           fi
