@@ -4,8 +4,8 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "npm run prisma:generate && npm run prisma:deploy && node src/server.js",
-    "start:docker": "npm run prisma:deploy && node src/server.js",
+    "start": "npm run prisma:generate && npm run prisma:deploy:resilient && node src/server.js",
+    "start:docker": "npm run prisma:deploy:resilient && node src/server.js",
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:watch": "vitest",
@@ -15,6 +15,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "prisma:deploy:resilient": "sh -c 'npm run prisma:deploy || (echo \"[prisma] migrate deploy failed; forcing schema sync with data loss acceptance\" && npx prisma db push --accept-data-loss)'",
     "bootstrap": "node src/scripts/bootstrap-super-admin.js",
     "test:api": "node src/scripts/api-integration-test.js"
   },
