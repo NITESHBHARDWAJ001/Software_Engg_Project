@@ -46,42 +46,24 @@ model User {
   passwordHash            String
   firstName               String
   lastName                String
+  phone                   String?
+  jobTitle                String?
+  employmentType          EmploymentType?
+  employmentValidFrom     DateTime?
+  employmentValidTo       DateTime?
   role                    Role              @default(STAFF)
   isActive                Boolean           @default(true)
   organizationId          String?
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt
+  organization            Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  refreshSessions         RefreshSession[]
+  createdTasks            Task[]            @relation("TaskCreatedBy")
+  assignedTasks           Task[]            @relation("TaskAssignedTo")
+  taskComments            TaskComment[]
   createdExhibitions      Exhibition[]      @relation("ExhibitionCreatedBy")
   capturedExhibitionLeads ExhibitionLead[]  @relation("ExhibitionLeadCapturedBy")
   leadInteractions        LeadInteraction[]
-  refreshSessions         RefreshSession[]
-  assignedTasks           Task[]            @relation("TaskAssignedTo")
-  createdTasks            Task[]            @relation("TaskCreatedBy")
-  taskComments            TaskComment[]
-  organization            Organization?     @relation(fields: [organizationId], references: [id])
-  id             String          @id @default(uuid())
-  email          String          @unique
-  passwordHash   String
-  firstName      String
-  lastName       String
-  phone          String?
-  jobTitle       String?
-  employmentType EmploymentType?
-  employmentValidFrom DateTime?
-  employmentValidTo DateTime?
-  role           Role            @default(STAFF)
-  isActive       Boolean         @default(true)
-  organizationId String?
-  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  refreshSessions RefreshSession[]
-  createdTasks   Task[]          @relation("TaskCreatedBy")
-  assignedTasks  Task[]          @relation("TaskAssignedTo")
-  taskComments   TaskComment[]
-  createdExhibitions Exhibition[] @relation("ExhibitionCreatedBy")
-  capturedExhibitionLeads ExhibitionLead[] @relation("ExhibitionLeadCapturedBy")
-  leadInteractions LeadInteraction[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
 
   @@index([organizationId])
   @@index([role])

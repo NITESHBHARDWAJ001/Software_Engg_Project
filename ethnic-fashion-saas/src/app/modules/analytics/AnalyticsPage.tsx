@@ -14,12 +14,12 @@ import {
   FiActivity,
 } from 'react-icons/fi';
 import {
-  socialMediaService,
+  socialApiService,
   SocialReel,
   Comment,
   Campaign,
   SentimentType,
-} from '../../../services/mock/socialMediaService';
+} from '../../../services/api/socialApiService';
 import { analyticsService } from '../../../services/api/analyticsService';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { formatCurrency, formatDate, getRelativeTime } from '../../../utils/helpers';
@@ -75,6 +75,7 @@ const AnalyticsPage: React.FC = () => {
       return;
     }
 
+    const organizationId = currentOrganization?.id ?? 'org-1';
     setLoading(true);
     try {
       const [
@@ -83,14 +84,14 @@ const AnalyticsPage: React.FC = () => {
         sentimentTrendData,
         campaignsData,
         engagementData,
-        aiReportData
+        aiReportData,
       ] = await Promise.all([
-        socialMediaService.getAllReels('org-1'),
-        socialMediaService.getSentimentAnalysis('org-1'),
-        socialMediaService.getSentimentTrend(),
-        socialMediaService.getCampaigns('org-1'),
-        socialMediaService.getEngagementStats('org-1'),
-        analyticsService.getAiReport().catch(() => null),
+        socialApiService.getAllReels(organizationId),
+        socialApiService.getSentimentAnalysis(organizationId),
+        socialApiService.getSentimentTrend(organizationId),
+        socialApiService.getCampaigns(organizationId),
+        socialApiService.getEngagementStats(organizationId),
+        analyticsService.getAiReport(organizationId).catch(() => null),
       ]);
 
       setReels(reelsData);
@@ -110,8 +111,9 @@ const AnalyticsPage: React.FC = () => {
     if (!scrapeUrl) return;
     setIsScraping(true);
     try {
-      await analyticsService.triggerScrape(scrapeUrl);
-      const report = await analyticsService.getAiReport('test-org');
+      const organizationId = currentOrganization?.id ?? 'org-1';
+      await analyticsService.triggerScrape(scrapeUrl, organizationId);
+      const report = await analyticsService.getAiReport(organizationId);
       setAiReport(report);
       setScrapeUrl('');
     } catch (e) {
