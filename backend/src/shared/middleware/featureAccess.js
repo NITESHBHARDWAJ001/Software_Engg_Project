@@ -3,6 +3,7 @@ import { getOrganizationScope } from './tenant.js';
 import { subscriptionService } from '../../modules/subscriptions/subscription.service.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
+const ORG_ADMIN = 'ORG_ADMIN';
 
 export const requireFeatureAccess = (featureKey) => {
   return async (req, _res, next) => {
@@ -10,7 +11,7 @@ export const requireFeatureAccess = (featureKey) => {
       throw new HttpError(401, 'Unauthorized', 'UNAUTHORIZED');
     }
 
-    if (req.auth.role === SUPER_ADMIN) {
+    if (req.auth.role === SUPER_ADMIN || req.auth.role === ORG_ADMIN) {
       next();
       return;
     }
