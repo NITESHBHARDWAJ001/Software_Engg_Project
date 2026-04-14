@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../../utils/constants';
-import mockAnalyticsService from '../../mock/analyticsService';
+import mockAnalyticsService from '../mock/analyticsService';
 
 function getAuthToken(): string | null {
   try {

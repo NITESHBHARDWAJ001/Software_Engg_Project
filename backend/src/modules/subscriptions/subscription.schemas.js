@@ -89,3 +89,14 @@ export const mockCheckoutSchema = z.object({
     .optional(),
   notes: z.string().max(500).optional(),
 });
+
+const modulePolicySchema = z.object({
+  allowed: z.boolean().default(true),
+  limits: z.record(z.any()).default({}),
+});
+
+export const moduleAccessUpdateSchema = z.object({
+  moduleAccessPolicies: z.record(
+    z.record(modulePolicySchema),
+  ),
+});

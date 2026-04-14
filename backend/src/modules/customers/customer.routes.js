@@ -7,6 +7,7 @@ import { customerService } from './customer.service.js';
 import { HttpError } from '../../shared/http/httpError.js';
 import { ok, paged } from '../../shared/http/response.js';
 import { requireFeatureAccess } from '../../shared/middleware/featureAccess.js';
+import { requireModuleAccess } from '../../shared/middleware/moduleAccess.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
 const ORG_ADMIN = 'ORG_ADMIN';
@@ -16,6 +17,7 @@ export const customerRouter = Router();
 
 customerRouter.use(authGuard, tenantGuard);
 customerRouter.use(requireFeatureAccess('CUSTOMER_MANAGEMENT'));
+customerRouter.use(requireModuleAccess('CUSTOMER_MANAGEMENT'));
 
 customerRouter.get('/', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);

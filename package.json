@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test:analytics:flow": "node scripts/seed_and_test_analytics_flow.mjs"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1"
   }

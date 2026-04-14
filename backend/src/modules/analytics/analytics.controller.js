@@ -1,5 +1,7 @@
 import { analyticsService } from './analytics.service.js';
 import { HttpError } from '../../shared/http/httpError.js';
+import { inventoryService } from '../inventory/inventory.service.js';
+import { analyticsStockContextSchema } from './analytics.schemas.js';
 
 export const triggerScrape = async (req, res, next) => {
   try {
@@ -94,6 +96,37 @@ export const getProductsByCategory = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const result = await analyticsService.getProductsByCategory(orgId, page, limit);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const syncStockContext = async (req, res, next) => {
+  try {
+    const orgId = req.auth?.organizationId;
+    if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+
+    const payload = analyticsStockContextSchema.parse(req.body || {});
+    let items = payload.items;
+
+    if (payload.sourceMode === 'AUTO') {
+      items = await inventoryService.listForAnalytics(orgId, payload.limit);
+    }
+
+    const result = await analyticsService.ingestStockContext(orgId, payload.sourceMode, items);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getManualStockCheck = async (req, res, next) => {
+  try {
+    const orgId = req.auth?.organizationId;
+    if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+
+    const result = await analyticsService.getStockContextManualCheck(orgId);
     res.json(result);
   } catch (error) {
     next(error);

@@ -15,6 +15,7 @@ import {
 } from './finance.schemas.js';
 import { financeService } from './finance.service.js';
 import { requireFeatureAccess } from '../../shared/middleware/featureAccess.js';
+import { requireModuleAccess } from '../../shared/middleware/moduleAccess.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
 const ORG_ADMIN = 'ORG_ADMIN';
@@ -23,6 +24,7 @@ const STAFF = 'STAFF';
 export const financeRouter = Router();
 financeRouter.use(authGuard, tenantGuard);
 financeRouter.use(requireFeatureAccess('FINANCE_MANAGEMENT'));
+financeRouter.use(requireModuleAccess('FINANCE_MANAGEMENT'));
 
 financeRouter.get('/invoices', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const organizationId = getOrganizationScope(req);

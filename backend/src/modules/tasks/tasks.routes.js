@@ -13,6 +13,7 @@ import {
 } from './tasks.schemas.js';
 import { taskService } from './tasks.service.js';
 import { requireFeatureAccess } from '../../shared/middleware/featureAccess.js';
+import { requireModuleAccess } from '../../shared/middleware/moduleAccess.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
 const ORG_ADMIN = 'ORG_ADMIN';
@@ -21,6 +22,7 @@ const STAFF = 'STAFF';
 export const taskRouter = Router();
 taskRouter.use(authGuard, tenantGuard);
 taskRouter.use(requireFeatureAccess('TASK_MANAGEMENT'));
+taskRouter.use(requireModuleAccess('TASK_MANAGEMENT'));
 
 taskRouter.get('/', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);

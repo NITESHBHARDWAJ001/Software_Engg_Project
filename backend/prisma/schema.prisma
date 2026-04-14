@@ -27,6 +27,10 @@ model Organization {
   slug        String   @unique
   email       String?
   phone       String?
+  analyticsAvailable    Boolean  @default(false)
+  analyticsSyncedAt     DateTime?
+  analyticsSyncAttemptAt DateTime?
+  analyticsSyncError    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -39,6 +43,9 @@ model Organization {
   exhibitions Exhibition[]
   exhibitionLeads ExhibitionLead[]
   subscriptions OrganizationSubscription[]
+
+  @@index([analyticsAvailable])
+  @@index([analyticsSyncAttemptAt])
 }
 
 model User {

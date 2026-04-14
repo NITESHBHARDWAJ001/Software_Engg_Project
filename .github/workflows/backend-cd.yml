@@ -1,4 +1,4 @@
-name: Backend CD
+name: Backend CD - Build & Deploy
 
 on:
   workflow_dispatch:
@@ -7,22 +7,33 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/backend-cd.yml'
+      - 'docker-compose.yml'
 
 permissions:
   contents: read
   packages: write
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/backend
+  DOCKER_BUILDKIT: 1
+
 jobs:
-  docker:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Login to GHCR
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -30,13 +41,15 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/backend
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=backend,enable=${{ github.ref == 'refs/heads/Backend' }}
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-      - name: Build and push image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: backend
@@ -44,3 +57,173 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test-image:
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Docker image health
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
+          JWT_ACCESS_SECRET: test-access-secret-long-enough-for-testing
+          JWT_REFRESH_SECRET: test-refresh-secret-long-enough-for-testing
+          JWT_ACCESS_EXPIRES_IN: 15m
+          JWT_REFRESH_EXPIRES_IN_DAYS: 7
+          CORS_ORIGIN: http://localhost:3000
+          ANALYTICS_SERVICE_URL: http://localhost:8000
+          ANALYTICS_ORG_SYNC_INTERVAL_MS: 86400000
+          PORT: 4000
+          NODE_ENV: test
+        run: |
+          # Pull the built image
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Run container with health check
+          docker run -d \
+            --name backend-test \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET" \
+            -e JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
+            -e JWT_ACCESS_EXPIRES_IN="$JWT_ACCESS_EXPIRES_IN" \
+            -e JWT_REFRESH_EXPIRES_IN_DAYS="$JWT_REFRESH_EXPIRES_IN_DAYS" \
+            -e CORS_ORIGIN="$CORS_ORIGIN" \
+            -e ANALYTICS_SERVICE_URL="$ANALYTICS_SERVICE_URL" \
+            -e ANALYTICS_ORG_SYNC_INTERVAL_MS="$ANALYTICS_ORG_SYNC_INTERVAL_MS" \
+            -e PORT="$PORT" \
+            -e NODE_ENV="$NODE_ENV" \
+            --network host \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Wait for container to be healthy
+          for i in {1..30}; do
+            if docker exec backend-test wget --quiet --tries=1 --spider http://localhost:4000/health/live || true; then
+              echo "Container is healthy"
+              docker stop backend-test
+              exit 0
+            fi
+            echo "Waiting for health check... ($i/30)"
+            sleep 2
+          done
+          
+          echo "Container failed health check"
+          docker logs backend-test
+          docker stop backend-test
+          exit 1
+
+  deploy:
+    needs: test-image
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/Backend'
+    environment:
+      name: production
+      url: https://api.your-domain.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to production
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          # This is a placeholder for your deployment strategy
+          # Options:
+          # 1. Docker Swarm (below)
+          # 2. Kubernetes (use kubectl)
+          # 3. AWS ECS / EKS
+          # 4. DigitalOcean App Platform
+          # 5. Railway / Render / Fly.io
+          
+          echo "Deploying backend..."
+          echo "Repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Deployment strategy: Docker Swarm (configure via secrets)"
+          
+          # Example Docker Swarm deployment:
+          if [ ! -z "$DEPLOY_HOST" ]; then
+            mkdir -p ~/.ssh
+            echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            
+            ssh-keyscan -p $DEPLOY_PORT -H $DEPLOY_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+            
+            ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+              cd /opt/app
+              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+              docker-compose -f docker-compose.prod.yml up -d
+              docker-compose exec -T backend npm run prisma:deploy
+              docker system prune -f
+            EOF
+          else
+            echo "DEPLOY_HOST not set. Skipping deployment."
+            echo "Configure GitHub Secrets for deployment in repository settings."
+          fi
+
+      - name: Health check
+        continue-on-error: true
+        run: |
+          echo "Running health checks..."
+          
+          for i in {1..10}; do
+            if curl -f http://${{ secrets.DEPLOY_HOST }}:4000/health/live -m 5; then
+              echo "✓ Backend health check passed"
+              exit 0
+            fi
+            echo "Health check attempt $i/10 failed, retrying..."
+            sleep 5
+          done
+          
+          echo "✗ Backend failed health check"
+          exit 1
+
+  notify:
+    needs: [build, test-image, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build**: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tests**: ${{ needs.test-image.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy**: ${{ needs.deploy.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

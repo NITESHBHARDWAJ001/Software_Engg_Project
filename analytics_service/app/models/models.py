@@ -3,6 +3,28 @@ from sqlalchemy.orm import relationship
 import datetime
 from app.db.database import Base
 
+class Organization(Base):
+    __tablename__ = "organizations"
+    org_id = Column(String, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=True)
+    slug = Column(String, unique=True, index=True, nullable=True)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class StockContextEntry(Base):
+    __tablename__ = "stock_context_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(String, index=True)
+    source_mode = Column(String, default="AUTO")
+    sku = Column(String, index=True)
+    name = Column(String, index=True)
+    category = Column(String, index=True)
+    current_stock = Column(Integer, default=0)
+    note = Column(Text, nullable=True)
+    captured_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
 class Competitor(Base):
     __tablename__ = "competitors"
     id = Column(Integer, primary_key=True, index=True)

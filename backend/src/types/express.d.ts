@@ -8,6 +8,7 @@ declare global {
         role: Role;
         organizationId: string | null;
       };
+      moduleLimits?: Record<string, unknown>;
     }
   }
 }

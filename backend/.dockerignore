@@ -6,3 +6,14 @@ npm-debug.log
 .env.*
 coverage
 dist
+.DS_Store
+*.log
+.vscode
+.idea
+.cache
+tests
+.vitest
+vitest.config.js
+eslint.config.js
+README.md
+DEPLOYMENT.md

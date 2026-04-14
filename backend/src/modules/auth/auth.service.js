@@ -2,8 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 import { prisma } from '../../shared/db/prisma.js';
 import { HttpError } from '../../shared/http/httpError.js';
+import { analyticsService } from '../analytics/analytics.service.js';
 
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 const FREE_PLAN_CODE = 'FREE';
@@ -58,7 +60,7 @@ const ensureFreePlan = async (tx, actorId) => {
       price: 0,
       currency: 'INR',
       isActive: true,
-      features: ['CUSTOMER_MANAGEMENT', 'INVENTORY_MANAGEMENT'],
+      features: ['CUSTOMER_MANAGEMENT', 'INVENTORY_MANAGEMENT', 'ANALYTICS_MANAGEMENT'],
       limits: {
         maxUsers: 2,
         maxExhibitions: 2,
@@ -82,50 +84,108 @@ export const authService = {
     const [firstName, ...rest] = payload.adminName.trim().split(/\s+/);
     const lastName = rest.join(' ') || 'Admin';
     const passwordHash = await argon2.hash(payload.password);
+    const organizationId = randomUUID();
 
-    const { user } = await prisma.$transaction(async (tx) => {
-      const organization = await tx.organization.create({
-        data: {
-          name: payload.organizationName,
-          slug,
-          email: payload.email,
-        },
-      });
+    let user;
 
-      const user = await tx.user.create({
-        data: {
-          email: payload.email,
-          passwordHash,
-          firstName: firstName || 'Org',
-          lastName,
-          role: 'ORG_ADMIN',
-          isActive: true,
-          organizationId: organization.id,
-        },
-      });
-
-      const freePlan = await ensureFreePlan(tx, user.id);
-      await tx.organizationSubscription.create({
-        data: {
-          organizationId: organization.id,
-          planId: freePlan.id,
-          status: 'ACTIVE',
-          startDate: new Date(),
-          autoRenew: true,
-          seats: 2,
-          includedFeatures: [],
-          excludedFeatures: [],
-          metadata: {
-            onboarding: 'DEFAULT_FREE_PLAN',
-            createdVia: 'SELF_REGISTER',
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const organization = await tx.organization.create({
+          data: {
+            id: organizationId,
+            name: payload.organizationName,
+            slug,
+            email: payload.email,
           },
-          createdBy: user.id,
-          updatedBy: user.id,
-        },
+        });
+
+        const createdUser = await tx.user.create({
+          data: {
+            email: payload.email,
+            passwordHash,
+            firstName: firstName || 'Org',
+            lastName,
+            role: 'ORG_ADMIN',
+            isActive: true,
+            organizationId: organization.id,
+          },
+        });
+
+        const freePlan = await ensureFreePlan(tx, createdUser.id);
+        await tx.organizationSubscription.create({
+          data: {
+            organizationId: organization.id,
+            planId: freePlan.id,
+            status: 'ACTIVE',
+            startDate: new Date(),
+            autoRenew: true,
+            seats: 2,
+            includedFeatures: [],
+            excludedFeatures: [],
+            metadata: {
+              onboarding: 'DEFAULT_FREE_PLAN',
+              createdVia: 'SELF_REGISTER',
+            },
+            createdBy: createdUser.id,
+            updatedBy: createdUser.id,
+          },
+        });
+
+        return { organization, user: createdUser };
       });
 
-      return { organization, user };
-    });
+      user = result.user;
+    } catch (error) {
+      try {
+        await analyticsService.deleteOrganization(organizationId);
+      } catch {
+        // Ignore cleanup failures to surface primary error.
+      }
+      throw error;
+    }
+
+    // Best effort: keep registration successful even if analytics service is temporarily down.
+    analyticsService
+      .upsertOrganization({
+        orgId: organizationId,
+        name: payload.organizationName,
+        slug,
+        email: payload.email,
+      })
+      .then(async () => {
+        await prisma.organization.update({
+          where: { id: organizationId },
+          data: {
+            analyticsAvailable: true,
+            analyticsSyncedAt: new Date(),
+            analyticsSyncAttemptAt: new Date(),
+            analyticsSyncError: null,
+          },
+        });
+        logger.info({ organizationId }, 'Analytics org sync succeeded after register');
+      })
+      .catch(async (error) => {
+        await prisma.organization
+          .update({
+            where: { id: organizationId },
+            data: {
+              analyticsAvailable: false,
+              analyticsSyncAttemptAt: new Date(),
+              analyticsSyncError: error?.message?.slice(0, 1000) || 'SYNC_FAILED',
+            },
+          })
+          .catch(() => {
+            // Ignore status update errors for non-blocking fallback behavior.
+          });
+
+        logger.warn(
+          {
+            organizationId,
+            error: error?.message,
+          },
+          'Analytics org sync failed after register; daily reconciler will retry',
+        );
+      });
 
     const authPayload = {
       sub: user.id,

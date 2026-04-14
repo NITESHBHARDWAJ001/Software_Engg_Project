@@ -6,6 +6,7 @@ import { HttpError } from '../../shared/http/httpError.js';
 import { ok, paged } from '../../shared/http/response.js';
 import {
   mockCheckoutSchema,
+  moduleAccessUpdateSchema,
   organizationSubscriptionCreateSchema,
   organizationSubscriptionUpdateSchema,
   planCreateSchema,
@@ -146,4 +147,26 @@ subscriptionRouter.post('/mock-checkout', allowRoles(SUPER_ADMIN, ORG_ADMIN), as
 
   const result = await subscriptionService.mockCheckoutAndActivate(organizationId, req.auth.userId, payload);
   res.status(201).json(ok(result, 'Mock checkout completed'));
+});
+
+subscriptionRouter.get('/me/modules/:moduleKey/access', allowRoles(ORG_ADMIN, STAFF), async (req, res) => {
+  const organizationId = getOrganizationScope(req);
+  if (!organizationId) {
+    throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+  }
+
+  const moduleKey = Array.isArray(req.params.moduleKey) ? req.params.moduleKey[0] : req.params.moduleKey;
+  const policy = await subscriptionService.getModuleAccessPolicy(organizationId, req.auth.role, moduleKey);
+  res.json(ok({ moduleKey, role: req.auth.role, ...policy }));
+});
+
+subscriptionRouter.put('/me/modules/access', allowRoles(ORG_ADMIN), async (req, res) => {
+  const organizationId = getOrganizationScope(req);
+  if (!organizationId) {
+    throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+  }
+
+  const payload = moduleAccessUpdateSchema.parse(req.body);
+  const result = await subscriptionService.updateOrganizationModuleAccess(organizationId, req.auth.userId, payload);
+  res.json(ok(result, 'Module access policies updated'));
 });

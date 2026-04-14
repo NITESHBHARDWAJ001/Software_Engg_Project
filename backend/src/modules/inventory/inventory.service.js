@@ -232,4 +232,25 @@ export const inventoryService = {
       take: 100,
     });
   },
+
+  async listForAnalytics(organizationId, limit = 200) {
+    const items = await prisma.inventoryItem.findMany({
+      where: { organizationId },
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+      select: {
+        sku: true,
+        name: true,
+        category: true,
+        currentStock: true,
+      },
+    });
+
+    return items.map((item) => ({
+      sku: item.sku,
+      name: item.name,
+      category: item.category,
+      current_stock: item.currentStock,
+    }));
+  },
 };

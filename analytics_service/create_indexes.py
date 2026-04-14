@@ -8,7 +8,7 @@ from app.db.database import engine
 
 async def create_indexes():
     """Create indexes for faster dashboard queries"""
-    indexes = [
+    common_indexes = [
         # Competitor queries
         "CREATE INDEX IF NOT EXISTS idx_competitor_org_id ON competitors(org_id);",
         
@@ -27,13 +27,15 @@ async def create_indexes():
         "CREATE INDEX IF NOT EXISTS idx_sentiment_analyzed_at ON social_post_sentiments(analyzed_at DESC);",
         
         # Trend report queries
-        "CREATE INDEX IF NOT EXISTS idx_trend_report_org_id ON trend_report(org_id);",
-        "CREATE INDEX IF NOT EXISTS idx_trend_report_generated_at ON trend_report(generated_at DESC);",
-        
-        # Composite indexes for common queries
-        "CREATE INDEX IF NOT EXISTS idx_competitor_org_product ON competitors(org_id) INCLUDE (id, name, url);",
+        "CREATE INDEX IF NOT EXISTS idx_trend_report_org_id ON trend_reports(org_id);",
+        "CREATE INDEX IF NOT EXISTS idx_trend_report_generated_at ON trend_reports(generated_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_sentiment_competitor_label ON social_post_sentiments(competitor_id, sentiment_label);",
     ]
+
+    backend_name = engine.url.get_backend_name()
+    indexes = list(common_indexes)
+    if backend_name == "postgresql":
+        indexes.append("CREATE INDEX IF NOT EXISTS idx_competitor_org_product ON competitors(org_id) INCLUDE (id, name, url);")
     
     async with engine.begin() as conn:
         for index_sql in indexes:
@@ -46,7 +48,7 @@ async def create_indexes():
         await conn.commit()
 
 async def main():
-    print("Creating database indexes for analytics service...")
+    print(f"Creating database indexes for analytics service ({engine.url.get_backend_name()})...")
     await create_indexes()
     print("Database optimization complete!")
 
