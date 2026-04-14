@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  FiBarChart3,
+  FiBarChart,
   FiTrendingUp,
   FiSmile,
-  FiMeh,
-  FiFrown,
   FiTarget,
   FiRefreshCw,
-  FiLoader,
 } from 'react-icons/fi';
 import {
   LineChart,
@@ -121,7 +118,7 @@ export const AnalyticsDashboard: React.FC = () => {
     loadDashboardData();
 
     // Listen for WebSocket events
-    const handleScrapeComplete = (event: any) => {
+    const handleScrapeComplete = () => {
       console.log('[AnalyticsDashboard] Scrape complete event received');
       loadDashboardData();
     };
@@ -219,7 +216,7 @@ export const AnalyticsDashboard: React.FC = () => {
                   {competitors.reduce((sum, c) => sum + c.product_count, 0)}
                 </p>
               </div>
-              <FiBarChart3 className="text-4xl text-blue-500" />
+              <FiBarChart className="text-4xl text-blue-500" />
             </div>
           </CardContent>
         </Card>
@@ -267,9 +264,7 @@ export const AnalyticsDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pricing Trends */}
         <Card>
-          <CardHeader>
-            <h3 className="text-lg font-semibold">Pricing Trends (30 Days)</h3>
-          </CardHeader>
+          <CardHeader title="Pricing Trends (30 Days)" />
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={pricingData}>
@@ -297,9 +292,7 @@ export const AnalyticsDashboard: React.FC = () => {
 
         {/* Sentiment Analysis */}
         <Card>
-          <CardHeader>
-            <h3 className="text-lg font-semibold">Sentiment Breakdown</h3>
-          </CardHeader>
+          <CardHeader title="Sentiment Breakdown" />
           <CardContent>
             <div className="flex flex-col items-center">
               <ResponsiveContainer width="100%" height={300}>
@@ -328,9 +321,7 @@ export const AnalyticsDashboard: React.FC = () => {
 
       {/* Competitor Comparison */}
       <Card>
-        <CardHeader>
-          <h3 className="text-lg font-semibold">Competitor Comparison</h3>
-        </CardHeader>
+        <CardHeader title="Competitor Comparison" />
         <CardContent>
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={competitorStats}>
@@ -350,9 +341,7 @@ export const AnalyticsDashboard: React.FC = () => {
       {/* Top Insights */}
       {insights.length > 0 && (
         <Card>
-          <CardHeader>
-            <h3 className="text-lg font-semibold">🤖 AI Insights</h3>
-          </CardHeader>
+          <CardHeader title="AI Insights" />
           <CardContent>
             <div className="space-y-4">
               {insights.map((insight, idx) => (
@@ -368,9 +357,7 @@ export const AnalyticsDashboard: React.FC = () => {
 
       {/* Products Table */}
       <Card>
-        <CardHeader>
-          <h3 className="text-lg font-semibold">Tracked Products</h3>
-        </CardHeader>
+        <CardHeader title="Tracked Products" />
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

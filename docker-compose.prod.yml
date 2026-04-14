@@ -30,7 +30,7 @@ services:
         max-file: "3"
 
   analytics:
-    image: ghcr.io/${{ github.repository }}/analytics:latest
+    image: ghcr.io/niteshbhardwaj001/software_engg_project/analytics:latest
     container_name: analytics_prod
     depends_on:
       postgres:
@@ -57,7 +57,7 @@ services:
         max-file: "3"
 
   backend:
-    image: ghcr.io/${{ github.repository }}/backend:latest
+    image: ghcr.io/niteshbhardwaj001/software_engg_project/backend:latest
     container_name: backend_prod
     depends_on:
       postgres:
@@ -95,7 +95,7 @@ services:
         max-file: "3"
 
   frontend:
-    image: ghcr.io/${{ github.repository }}/frontend:latest
+    image: ghcr.io/niteshbhardwaj001/software_engg_project/frontend:latest
     container_name: frontend_prod
     environment:
       VITE_API_URL: https://api.your-domain.com

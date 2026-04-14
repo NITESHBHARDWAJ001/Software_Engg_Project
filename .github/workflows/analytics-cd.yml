@@ -14,7 +14,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/analytics
+  IMAGE_NAME: niteshbhardwaj001/software_engg_project/analytics
   DOCKER_BUILDKIT: 1
 
 jobs:

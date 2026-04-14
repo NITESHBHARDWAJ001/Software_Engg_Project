@@ -15,7 +15,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/backend
+  IMAGE_NAME: niteshbhardwaj001/software_engg_project/backend
   DOCKER_BUILDKIT: 1
 
 jobs:
