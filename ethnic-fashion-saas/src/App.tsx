@@ -29,6 +29,16 @@ import InventoryPage from './app/modules/inventory/InventoryPage.tsx';
 import FinancePage from './app/modules/finance/FinancePage.tsx';
 import AnalyticsPage from './app/modules/analytics/AnalyticsPage.tsx';
 import SettingsPage from './app/modules/settings/SettingsPage.tsx';
+import AIFeaturesPage from './app/modules/ai/AIFeaturesPage.tsx';
+import SizeFitPage from './app/modules/ai/SizeFitPage.tsx';
+import TrendForecastPage from './app/modules/ai/TrendForecastPage.tsx';
+import DesignCopilotPage from './app/modules/ai/DesignCopilotPage.tsx';
+import DynamicPricingPage from './app/modules/ai/DynamicPricingPage.tsx';
+import DiscoveryFeedPage from './app/modules/ai/DiscoveryFeedPage.tsx';
+import ProductContentPage from './app/modules/ai/ProductContentPage.tsx';
+import SupportAssistantPage from './app/modules/ai/SupportAssistantPage.tsx';
+import VisualSearchPage from './app/modules/ai/VisualSearchPage.tsx';
+import InventoryReplenishmentPage from './app/modules/ai/InventoryReplenishmentPage.tsx';
 
 function App() {
   return (
@@ -99,6 +109,16 @@ function App() {
           <Route path="inventory/*" element={<InventoryPage />} />
           <Route path="finance/*" element={<FinancePage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="ai-stylist" element={<AIFeaturesPage />} />
+          <Route path="ai-size-fit" element={<SizeFitPage />} />
+          <Route path="ai-trend-forecast" element={<TrendForecastPage />} />
+          <Route path="ai-design-copilot" element={<DesignCopilotPage />} />
+          <Route path="ai-dynamic-pricing" element={<DynamicPricingPage />} />
+          <Route path="ai-discovery-feed" element={<DiscoveryFeedPage />} />
+          <Route path="ai-product-content" element={<ProductContentPage />} />
+          <Route path="ai-support-assistant" element={<SupportAssistantPage />} />
+          <Route path="ai-visual-search" element={<VisualSearchPage />} />
+          <Route path="ai-inventory-replenishment" element={<InventoryReplenishmentPage />} />
           <Route path="settings/*" element={<SettingsPage />} />
         </Route>
 
