@@ -33,7 +33,7 @@ export const mockAnalyticsService = {
     return { ok: true };
   },
 
-  async getAiReport(orgId?: string) {
+  async getAiReport(_orgId?: string) {
     await delay(300);
     const summary = lastScrapeUrl
       ? `Quick executive summary for ${lastScrapeUrl}: competitor pricing is mixed; look for opportunities in value bundles and targeted reels.`

@@ -112,4 +112,31 @@ describe('taskService', () => {
     expect(comment.userName).toBe('N S');
     expect(comment.content).toBe('hello');
   });
+
+  it('scopes staff list to assigned tasks only', async () => {
+    prismaMock.task.count.mockResolvedValue(0);
+    prismaMock.task.findMany.mockResolvedValue([]);
+
+    await taskService.list('org-1', 1, 20, {}, { role: 'STAFF', userId: 'staff-1' });
+
+    expect(prismaMock.task.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        organizationId: 'org-1',
+        assignedTo: 'staff-1',
+      }),
+    });
+  });
+
+  it('prevents staff from updating status of unassigned task', async () => {
+    prismaMock.task.findFirst.mockResolvedValue({
+      id: 't1',
+      organizationId: 'org-1',
+      assignedTo: 'someone-else',
+      completedAt: null,
+    });
+
+    await expect(
+      taskService.updateStatus('org-1', 't1', 'IN_PROGRESS', { role: 'STAFF', userId: 'staff-1' })
+    ).rejects.toBeInstanceOf(HttpError);
+  });
 });

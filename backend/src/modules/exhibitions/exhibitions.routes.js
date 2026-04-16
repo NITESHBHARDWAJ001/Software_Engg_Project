@@ -14,6 +14,7 @@ import {
 } from './exhibitions.schemas.js';
 import { exhibitionsService } from './exhibitions.service.js';
 import { requireFeatureAccess } from '../../shared/middleware/featureAccess.js';
+import { requireModuleAccess } from '../../shared/middleware/moduleAccess.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
 const ORG_ADMIN = 'ORG_ADMIN';
@@ -22,6 +23,7 @@ const STAFF = 'STAFF';
 export const exhibitionsRouter = Router();
 exhibitionsRouter.use(authGuard, tenantGuard);
 exhibitionsRouter.use(requireFeatureAccess('EXHIBITION_MANAGEMENT'));
+exhibitionsRouter.use(requireModuleAccess('EXHIBITION_MANAGEMENT'));
 
 exhibitionsRouter.get('/', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);

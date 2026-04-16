@@ -12,6 +12,7 @@ import {
 } from './inventory.schemas.js';
 import { inventoryService } from './inventory.service.js';
 import { requireFeatureAccess } from '../../shared/middleware/featureAccess.js';
+import { requireModuleAccess, requireModuleLimit } from '../../shared/middleware/moduleAccess.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
 const ORG_ADMIN = 'ORG_ADMIN';
@@ -20,6 +21,7 @@ const STAFF = 'STAFF';
 export const inventoryRouter = Router();
 inventoryRouter.use(authGuard, tenantGuard);
 inventoryRouter.use(requireFeatureAccess('INVENTORY_MANAGEMENT'));
+inventoryRouter.use(requireModuleAccess('INVENTORY_MANAGEMENT'));
 
 inventoryRouter.get('/', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);
@@ -47,7 +49,12 @@ inventoryRouter.get('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (re
   res.json(ok(item));
 });
 
-inventoryRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+inventoryRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN), requireModuleLimit('maxInventoryItems', async (req) => {
+  const orgId = getOrganizationScope(req);
+  if (!orgId) return 0;
+  const { total } = await inventoryService.list(orgId, 1, 1);
+  return total + 1;
+}), async (req, res) => {
   const orgId = getOrganizationScope(req);
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 

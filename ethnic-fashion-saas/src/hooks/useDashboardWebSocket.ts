@@ -17,7 +17,7 @@ interface ScrapeComplete {
 
 export const useDashboardWebSocket = (orgId: string, enabled: boolean = true) => {
   const socketRef = useRef<Socket | null>(null);
-  const connectTimeoutRef = useRef<NodeJS.Timeout>();
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const connect = useCallback(() => {
     if (!enabled || socketRef.current?.connected) return;
@@ -55,7 +55,7 @@ export const useDashboardWebSocket = (orgId: string, enabled: boolean = true) =>
         console.log('[useDashboardWebSocket] Disconnected from WebSocket');
       });
 
-      socketRef.current.on('error', (error) => {
+      socketRef.current.on('error', (error: unknown) => {
         console.error('[useDashboardWebSocket] WebSocket error:', error);
       });
     } catch (error) {

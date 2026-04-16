@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   FiAlertCircle,
   FiArrowDownRight,
@@ -25,7 +25,8 @@ import {
   LedgerEntry,
   LedgerEntryType,
 } from '../../../services/api/financeService';
-import { formatCurrency, formatDate } from '../../../utils/helpers';
+import { downloadFile, formatCurrency, formatDate } from '../../../utils/helpers';
+import { exportToExcel, exportToPDF, formatCurrencyForExport, formatDateForExport } from '../../../utils/exportUtils';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
@@ -42,7 +43,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
+import { toast } from 'sonner';
 
 type CashFlowData = {
   month: string;
@@ -82,6 +87,14 @@ const toMonthLabel = (period: string) => {
   return new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'short' });
 };
 
+const csvEscape = (value: string | number | null | undefined) => {
+  const text = String(value ?? '');
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+};
+
 const FinancePage: React.FC = () => {
   const [stats, setStats] = useState<FinanceStats | null>(null);
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([]);
@@ -95,6 +108,11 @@ const FinancePage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | 'all'>('all');
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [showLedgerForm, setShowLedgerForm] = useState(false);
+  
+  // Chart refs for PDF export
+  const cashFlowChartRef = useRef<HTMLDivElement>(null);
+  const incomeExpenseChartRef = useRef<HTMLDivElement>(null);
+  const invoiceStatusChartRef = useRef<HTMLDivElement>(null);
   const [invoiceForm, setInvoiceForm] = useState<NewInvoiceForm>({
     invoiceNumber: '',
     issueDate: new Date().toISOString().slice(0, 10),
@@ -259,6 +277,221 @@ const FinancePage: React.FC = () => {
     }
   };
 
+  const downloadCsv = (filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>) => {
+    const csv = [
+      headers.join(','),
+      ...rows.map((row) => row.map(csvEscape).join(',')),
+    ].join('\n');
+
+    downloadFile(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+  };
+
+  const downloadInvoiceCsv = (invoice: FinanceInvoice) => {
+    downloadCsv(
+      `invoice-${invoice.invoiceNumber}.csv`,
+      ['Invoice Number', 'Status', 'Issue Date', 'Due Date', 'Currency', 'Subtotal', 'Tax', 'Discount', 'Total', 'Paid At', 'Notes'],
+      [[
+        invoice.invoiceNumber,
+        invoice.status,
+        invoice.issueDate,
+        invoice.dueDate ?? '',
+        invoice.currency,
+        invoice.subtotal,
+        invoice.taxAmount,
+        invoice.discountAmount,
+        invoice.totalAmount,
+        invoice.paidAt ?? '',
+        invoice.notes ?? '',
+      ]],
+    );
+    toast.success(`Downloaded ${invoice.invoiceNumber}`);
+  };
+
+  const downloadReport = (type: 'profit-loss' | 'cash-flow' | 'outstanding') => {
+    const now = new Date().toISOString();
+
+    if (type === 'profit-loss') {
+      downloadCsv(
+        `profit-loss-${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Generated At', 'Total Revenue', 'Total Expenses', 'Net Profit', 'Profit Margin %'],
+        [[
+          now,
+          stats?.totalRevenue ?? 0,
+          stats?.totalExpenses ?? 0,
+          stats?.netProfit ?? 0,
+          stats && stats.totalRevenue > 0 ? ((stats.netProfit / stats.totalRevenue) * 100).toFixed(2) : '0.00',
+        ]],
+      );
+      toast.success('Downloaded Profit & Loss report');
+      return;
+    }
+
+    if (type === 'cash-flow') {
+      downloadCsv(
+        `cash-flow-${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Period', 'Income', 'Expense', 'Net'],
+        cashFlowData.map((row) => [row.month, row.income, row.expense, row.net]),
+      );
+      toast.success('Downloaded Cash Flow report');
+      return;
+    }
+
+    downloadCsv(
+      `outstanding-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Invoice Number', 'Status', 'Issue Date', 'Due Date', 'Total Amount'],
+      invoices
+        .filter((invoice) => invoice.status === 'PENDING' || invoice.status === 'OVERDUE')
+        .map((invoice) => [invoice.invoiceNumber, invoice.status, invoice.issueDate, invoice.dueDate ?? '', invoice.totalAmount]),
+    );
+    toast.success('Downloaded Outstanding Invoices report');
+  };
+
+  const exportReportToExcel = (type: 'profit-loss' | 'cash-flow' | 'outstanding') => {
+    const dateStr = formatDateForExport(new Date());
+
+    if (type === 'profit-loss') {
+      const data = [{
+        'Report Date': dateStr,
+        'Total Revenue': stats?.totalRevenue ?? 0,
+        'Total Expenses': stats?.totalExpenses ?? 0,
+        'Net Profit': stats?.netProfit ?? 0,
+        'Profit Margin %': stats && stats.totalRevenue > 0 ? ((stats.netProfit / stats.totalRevenue) * 100).toFixed(2) : '0.00',
+      }];
+
+      exportToExcel(
+        [{ name: 'Profit & Loss', data }],
+        `profit-loss-${dateStr}`
+      );
+      toast.success('Exported Profit & Loss as Excel');
+      return;
+    }
+
+    if (type === 'cash-flow') {
+      const data = cashFlowData.map((row) => ({
+        'Period': row.month,
+        'Income': row.income,
+        'Expense': row.expense,
+        'Net': row.net,
+      }));
+
+      exportToExcel(
+        [{ name: 'Cash Flow', data, headers: ['Period', 'Income', 'Expense', 'Net'] }],
+        `cash-flow-${dateStr}`
+      );
+      toast.success('Exported Cash Flow as Excel');
+      return;
+    }
+
+    const outstandingInvoices = invoices
+      .filter((invoice) => invoice.status === 'PENDING' || invoice.status === 'OVERDUE')
+      .map((invoice) => ({
+        'Invoice Number': invoice.invoiceNumber,
+        'Status': invoice.status,
+        'Issue Date': formatDateForExport(invoice.issueDate),
+        'Due Date': invoice.dueDate ? formatDateForExport(invoice.dueDate) : '',
+        'Total Amount': invoice.totalAmount,
+      }));
+
+    exportToExcel(
+      [{ name: 'Outstanding', data: outstandingInvoices }],
+      `outstanding-${dateStr}`
+    );
+    toast.success('Exported Outstanding Invoices as Excel');
+  };
+
+  const exportReportToPDF = async (type: 'profit-loss' | 'cash-flow' | 'outstanding') => {
+    const dateStr = formatDateForExport(new Date());
+    const chartRefs: Array<{ ref: HTMLElement; title: string }> = [];
+
+    if (type === 'profit-loss' && stats) {
+      const data = [{
+        'Metric': 'Total Revenue',
+        'Amount': formatCurrencyForExport(stats.totalRevenue),
+      }, {
+        'Metric': 'Total Expenses',
+        'Amount': formatCurrencyForExport(stats.totalExpenses),
+      }, {
+        'Metric': 'Net Profit',
+        'Amount': formatCurrencyForExport(stats.netProfit),
+      }, {
+        'Metric': 'Profit Margin',
+        'Amount': stats.totalRevenue > 0 ? `${((stats.netProfit / stats.totalRevenue) * 100).toFixed(2)}%` : '0%',
+      }];
+
+      if (incomeExpenseChartRef.current) {
+        chartRefs.push({
+          ref: incomeExpenseChartRef.current,
+          title: 'Revenue vs Expenses',
+        });
+      }
+
+      await exportToPDF({
+        filename: `profit-loss-${dateStr}`,
+        title: 'Profit & Loss Report',
+        subtitle: `Generated on ${dateStr}`,
+        data,
+        headers: ['Metric', 'Amount'],
+        chartRefs,
+      });
+      toast.success('Exported Profit & Loss as PDF');
+      return;
+    }
+
+    if (type === 'cash-flow') {
+      const data = cashFlowData.map((row) => ({
+        'Period': row.month,
+        'Income': formatCurrencyForExport(row.income),
+        'Expense': formatCurrencyForExport(row.expense),
+        'Net': formatCurrencyForExport(row.net),
+      }));
+
+      if (cashFlowChartRef.current) {
+        chartRefs.push({
+          ref: cashFlowChartRef.current,
+          title: 'Cash Flow Trend',
+        });
+      }
+
+      await exportToPDF({
+        filename: `cash-flow-${dateStr}`,
+        title: 'Cash Flow Report',
+        subtitle: `Generated on ${dateStr}`,
+        data,
+        headers: ['Period', 'Income', 'Expense', 'Net'],
+        chartRefs,
+      });
+      toast.success('Exported Cash Flow as PDF');
+      return;
+    }
+
+    const outstandingInvoices = invoices
+      .filter((invoice) => invoice.status === 'PENDING' || invoice.status === 'OVERDUE')
+      .map((invoice) => ({
+        'Invoice Number': invoice.invoiceNumber,
+        'Status': invoice.status,
+        'Issue Date': formatDateForExport(invoice.issueDate),
+        'Due Date': invoice.dueDate ? formatDateForExport(invoice.dueDate) : '-',
+        'Amount': formatCurrencyForExport(invoice.totalAmount),
+      }));
+
+    if (invoiceStatusChartRef.current) {
+      chartRefs.push({
+        ref: invoiceStatusChartRef.current,
+        title: 'Invoice Status Distribution',
+      });
+    }
+
+    await exportToPDF({
+      filename: `outstanding-${dateStr}`,
+      title: 'Outstanding Invoices Report',
+      subtitle: `Generated on ${dateStr}`,
+      data: outstandingInvoices,
+      headers: ['Invoice Number', 'Status', 'Issue Date', 'Due Date', 'Amount'],
+      chartRefs,
+    });
+    toast.success('Exported Outstanding Invoices as PDF');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -291,7 +524,7 @@ const FinancePage: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => downloadInvoiceCsv(selectedInvoice)}>
               <FiDownload className="w-4 h-4 mr-2" />
               Download
             </Button>
@@ -386,67 +619,110 @@ const FinancePage: React.FC = () => {
 
       {showInvoiceForm && (
         <Card>
-          <CardHeader title="Create Invoice" />
-          <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              className="border rounded-lg px-3 py-2"
-              placeholder="Invoice Number"
-              value={invoiceForm.invoiceNumber}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))}
-            />
-            <input
-              className="border rounded-lg px-3 py-2"
-              placeholder="Currency (e.g. INR)"
-              value={invoiceForm.currency}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, currency: e.target.value }))}
-            />
-            <input
-              type="date"
-              className="border rounded-lg px-3 py-2"
-              value={invoiceForm.issueDate}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, issueDate: e.target.value }))}
-            />
-            <input
-              type="date"
-              className="border rounded-lg px-3 py-2"
-              value={invoiceForm.dueDate}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-            />
-            <input
-              type="number"
-              className="border rounded-lg px-3 py-2"
-              placeholder="Subtotal"
-              value={invoiceForm.subtotal}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, subtotal: Number(e.target.value) || 0 }))}
-            />
-            <input
-              type="number"
-              className="border rounded-lg px-3 py-2"
-              placeholder="Tax Amount"
-              value={invoiceForm.taxAmount}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, taxAmount: Number(e.target.value) || 0 }))}
-            />
-            <input
-              type="number"
-              className="border rounded-lg px-3 py-2"
-              placeholder="Discount Amount"
-              value={invoiceForm.discountAmount}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, discountAmount: Number(e.target.value) || 0 }))}
-            />
-            <div className="flex items-center text-sm font-semibold text-gray-700">
-              Calculated Total: {formatCurrency(invoiceTotal)}
-            </div>
-            <textarea
-              className="border rounded-lg px-3 py-2 md:col-span-2"
-              placeholder="Notes"
-              rows={3}
-              value={invoiceForm.notes}
-              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
-            />
-            <div className="md:col-span-2 flex justify-end">
-              <Button variant="primary" onClick={createInvoice} disabled={savingInvoice}>
-                {savingInvoice ? 'Creating...' : 'Create Invoice'}
-              </Button>
+          <CardHeader title="Create Invoice" subtitle="Add a new invoice with items and payment details" />
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Invoice Details Section */}
+              <div className="md:col-span-2">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">Invoice Details</h3>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Invoice Number</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="INV-001"
+                  value={invoiceForm.invoiceNumber}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Currency</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="e.g. INR"
+                  value={invoiceForm.currency}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, currency: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Issue Date</label>
+                <input
+                  type="date"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={invoiceForm.issueDate}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, issueDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Due Date</label>
+                <input
+                  type="date"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={invoiceForm.dueDate}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                />
+              </div>
+
+              {/* Amount Section */}
+              <div className="md:col-span-2">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">Amount Details</h3>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Subtotal</label>
+                <input
+                  type="number"
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="0"
+                  value={invoiceForm.subtotal}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, subtotal: Number(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Tax Amount</label>
+                <input
+                  type="number"
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="0"
+                  value={invoiceForm.taxAmount}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, taxAmount: Number(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Discount Amount</label>
+                <input
+                  type="number"
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="0"
+                  value={invoiceForm.discountAmount}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, discountAmount: Number(e.target.value) || 0 }))}
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-gray-700">Calculated Total:</span>
+                <span className="text-lg font-bold text-primary">{formatCurrency(invoiceTotal)}</span>
+              </div>
+              
+              {/* Notes Section */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
+                <textarea
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="Add any additional notes or special instructions"
+                  rows={3}
+                  value={invoiceForm.notes}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
+                />
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="md:col-span-2 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowInvoiceForm(false)}>Cancel</Button>
+                <Button variant="primary" onClick={createInvoice} disabled={savingInvoice}>
+                  {savingInvoice ? 'Creating...' : 'Create Invoice'}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -454,53 +730,74 @@ const FinancePage: React.FC = () => {
 
       {showLedgerForm && (
         <Card>
-          <CardHeader title="Create Transaction" />
-          <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <select
-              className="border rounded-lg px-3 py-2"
-              value={ledgerForm.type}
-              onChange={(e) => setLedgerForm((prev) => ({ ...prev, type: e.target.value as LedgerEntryType }))}
-            >
-              <option value="INCOME">INCOME</option>
-              <option value="EXPENSE">EXPENSE</option>
-              <option value="ADJUSTMENT">ADJUSTMENT</option>
-            </select>
-            <input
-              type="number"
-              className="border rounded-lg px-3 py-2"
-              placeholder="Amount"
-              value={ledgerForm.amount}
-              onChange={(e) => setLedgerForm((prev) => ({ ...prev, amount: Number(e.target.value) || 0 }))}
-            />
-            <input
-              type="date"
-              className="border rounded-lg px-3 py-2"
-              value={ledgerForm.entryDate}
-              onChange={(e) => setLedgerForm((prev) => ({ ...prev, entryDate: e.target.value }))}
-            />
-            <input
-              className="border rounded-lg px-3 py-2"
-              placeholder="Category"
-              value={ledgerForm.category}
-              onChange={(e) => setLedgerForm((prev) => ({ ...prev, category: e.target.value }))}
-            />
-            <input
-              className="border rounded-lg px-3 py-2 md:col-span-2"
-              placeholder="Linked Invoice ID (optional)"
-              value={ledgerForm.invoiceId}
-              onChange={(e) => setLedgerForm((prev) => ({ ...prev, invoiceId: e.target.value }))}
-            />
-            <textarea
-              className="border rounded-lg px-3 py-2 md:col-span-2"
-              placeholder="Description"
-              rows={3}
-              value={ledgerForm.description}
-              onChange={(e) => setLedgerForm((prev) => ({ ...prev, description: e.target.value }))}
-            />
-            <div className="md:col-span-2 flex justify-end">
-              <Button variant="primary" onClick={createLedgerEntry} disabled={savingLedger}>
-                {savingLedger ? 'Creating...' : 'Create Transaction'}
-              </Button>
+          <CardHeader title="Create Transaction" subtitle="Record income, expenses, or ledger adjustments" />
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Transaction Type</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={ledgerForm.type}
+                  onChange={(e) => setLedgerForm((prev) => ({ ...prev, type: e.target.value as LedgerEntryType }))}
+                >
+                  <option value="INCOME">INCOME</option>
+                  <option value="EXPENSE">EXPENSE</option>
+                  <option value="ADJUSTMENT">ADJUSTMENT</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount</label>
+                <input
+                  type="number"
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="0"
+                  value={ledgerForm.amount}
+                  onChange={(e) => setLedgerForm((prev) => ({ ...prev, amount: Number(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Entry Date</label>
+                <input
+                  type="date"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={ledgerForm.entryDate}
+                  onChange={(e) => setLedgerForm((prev) => ({ ...prev, entryDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="e.g. Sales, Operating Expense"
+                  value={ledgerForm.category}
+                  onChange={(e) => setLedgerForm((prev) => ({ ...prev, category: e.target.value }))}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Linked Invoice (Optional)</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="Enter invoice ID if applicable"
+                  value={ledgerForm.invoiceId}
+                  onChange={(e) => setLedgerForm((prev) => ({ ...prev, invoiceId: e.target.value }))}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+                <textarea
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="Add details about this transaction"
+                  rows={3}
+                  value={ledgerForm.description}
+                  onChange={(e) => setLedgerForm((prev) => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+              <div className="md:col-span-2 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowLedgerForm(false)}>Cancel</Button>
+                <Button variant="primary" onClick={createLedgerEntry} disabled={savingLedger}>
+                  {savingLedger ? 'Creating...' : 'Create Transaction'}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -640,6 +937,10 @@ const FinancePage: React.FC = () => {
 
       {activeTab === 'invoices' && (
         <>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Invoice Section</h2>
+            <p className="text-sm text-gray-600">Manage invoice lifecycle and export individual invoice copies.</p>
+          </div>
           <div className="flex gap-2">
             <Button variant={filterStatus === 'all' ? 'primary' : 'outline'} size="sm" onClick={() => setFilterStatus('all')}>
               All ({invoices.length})
@@ -771,40 +1072,160 @@ const FinancePage: React.FC = () => {
       )}
 
       {activeTab === 'reports' && (
-        <Card>
-          <CardHeader title="Financial Reports" />
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="p-6 border border-gray-200 rounded-lg">
-                <FiFileText className="w-8 h-8 text-primary mb-3" />
-                <h3 className="font-semibold text-gray-900 mb-2">Profit & Loss Statement</h3>
-                <p className="text-sm text-gray-600 mb-4">Calculated from finance ledger data</p>
-                <Button variant="outline" size="sm">
-                  <FiDownload className="w-4 h-4 mr-2" />
-                  Download
-                </Button>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader title="Financial Reports" subtitle="Download financial reports in multiple formats" />
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="p-6 border border-gray-200 rounded-lg">
+                  <FiFileText className="w-8 h-8 text-primary mb-3" />
+                  <h3 className="font-semibold text-gray-900 mb-2">Profit & Loss Statement</h3>
+                  <p className="text-sm text-gray-600 mb-4">Calculated from finance ledger data</p>
+                  <div className="space-y-2">
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => downloadReport('profit-loss')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> CSV
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToExcel('profit-loss')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> Excel
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToPDF('profit-loss')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> PDF
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-6 border border-gray-200 rounded-lg">
+                  <FiBarChart2 className="w-8 h-8 text-primary mb-3" />
+                  <h3 className="font-semibold text-gray-900 mb-2">Cash Flow Report</h3>
+                  <p className="text-sm text-gray-600 mb-4">Trend view from monthly income/expense</p>
+                  <div className="space-y-2">
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => downloadReport('cash-flow')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> CSV
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToExcel('cash-flow')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> Excel
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToPDF('cash-flow')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> PDF
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-6 border border-gray-200 rounded-lg">
+                  <FiDollarSign className="w-8 h-8 text-primary mb-3" />
+                  <h3 className="font-semibold text-gray-900 mb-2">Outstanding Invoices</h3>
+                  <p className="text-sm text-gray-600 mb-4">Pending and overdue totals from live invoices</p>
+                  <div className="space-y-2">
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => downloadReport('outstanding')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> CSV
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToExcel('outstanding')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> Excel
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToPDF('outstanding')}>
+                      <FiDownload className="w-4 h-4 mr-2" /> PDF
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <div className="p-6 border border-gray-200 rounded-lg">
-                <FiBarChart2 className="w-8 h-8 text-primary mb-3" />
-                <h3 className="font-semibold text-gray-900 mb-2">Cash Flow Report</h3>
-                <p className="text-sm text-gray-600 mb-4">Trend view from monthly income/expense</p>
-                <Button variant="outline" size="sm">
-                  <FiDownload className="w-4 h-4 mr-2" />
-                  Download
-                </Button>
+            </CardContent>
+          </Card>
+
+          {/* Charts for visualization */}
+          <Card>
+            <CardHeader title="Revenue vs Expenses" />
+            <CardContent className="p-6">
+              <div ref={incomeExpenseChartRef}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={[
+                    {
+                      name: 'Financial Overview',
+                      revenue: stats?.totalRevenue ?? 0,
+                      expenses: stats?.totalExpenses ?? 0,
+                    },
+                  ]}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : 'N/A'} />
+                    <Legend />
+                    <Bar dataKey="revenue" fill="#10b981" name="Revenue" />
+                    <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <div className="p-6 border border-gray-200 rounded-lg">
-                <FiDollarSign className="w-8 h-8 text-primary mb-3" />
-                <h3 className="font-semibold text-gray-900 mb-2">Outstanding Invoices</h3>
-                <p className="text-sm text-gray-600 mb-4">Pending and overdue totals from live invoices</p>
-                <Button variant="outline" size="sm">
-                  <FiDownload className="w-4 h-4 mr-2" />
-                  Download
-                </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader title="Cash Flow Trend" />
+            <CardContent className="p-6">
+              <div ref={cashFlowChartRef}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={cashFlowData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : 'N/A'} />
+                    <Legend />
+                    <Line type="monotone" dataKey="income" stroke="#10b981" name="Income" strokeWidth={2} />
+                    <Line type="monotone" dataKey="expense" stroke="#ef4444" name="Expense" strokeWidth={2} />
+                    <Line type="monotone" dataKey="net" stroke="#3b82f6" name="Net" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader title="Invoice Status Distribution" />
+            <CardContent className="p-6">
+              <div ref={invoiceStatusChartRef}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        {
+                          name: 'Paid',
+                          value: invoices.filter((i) => i.status === 'PAID').length,
+                          fill: '#10b981',
+                        },
+                        {
+                          name: 'Pending',
+                          value: invoices.filter((i) => i.status === 'PENDING').length,
+                          fill: '#f59e0b',
+                        },
+                        {
+                          name: 'Overdue',
+                          value: invoices.filter((i) => i.status === 'OVERDUE').length,
+                          fill: '#ef4444',
+                        },
+                        {
+                          name: 'Draft',
+                          value: invoices.filter((i) => i.status === 'DRAFT').length,
+                          fill: '#6b7280',
+                        },
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name}: ${value}`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {[
+                        <Cell key="cell-paid" fill="#10b981" />,
+                        <Cell key="cell-pending" fill="#f59e0b" />,
+                        <Cell key="cell-overdue" fill="#ef4444" />,
+                        <Cell key="cell-draft" fill="#6b7280" />,
+                      ]}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

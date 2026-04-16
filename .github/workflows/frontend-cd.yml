@@ -1,0 +1,66 @@
+name: Frontend CD - Vercel Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ethnic-fashion-saas/**'
+      - '.github/workflows/frontend-cd.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ethnic-fashion-saas
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ethnic-fashion-saas/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --include=optional
+
+      - name: Build static site
+        run: npm run build
+        env:
+          VITE_API_URL: https://api.your-domain.com
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: ethnic-fashion-saas/dist/
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://your-domain.com
+    steps:
+      - name: Trigger Vercel deployment
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          echo "Deploying frontend to Vercel..."
+
+          if [ -n "$VERCEL_DEPLOY_HOOK_URL" ]; then
+            curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL"
+            echo "Vercel deploy hook triggered successfully."
+          else
+            echo "VERCEL_DEPLOY_HOOK_URL not set. Skipping deploy trigger."
+            echo "If Vercel Git integration is enabled, deployment is automatic on push to main."
+          fi

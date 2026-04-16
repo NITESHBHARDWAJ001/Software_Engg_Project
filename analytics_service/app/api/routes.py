@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, desc
+from sqlalchemy.orm import selectinload
+from datetime import datetime, timedelta
 from app.db.database import get_db
 from app.services import scraper, competitor_analysis, trend_detection, report_generator
 from app.services.ai_generative import generate_defensive_copy
@@ -115,6 +117,32 @@ class InventoryReplenishmentRequest(BaseModel):
     region: str = Field(..., min_length=2)
     current_open_po_units: int = Field(default=0, ge=0)
     service_level: str = Field(default="medium", pattern="^(low|medium|high)$")
+from app.models.models import SocialPostSentiment, Competitor, Product, ProductPriceHistory, TrendReport, Organization, StockContextEntry
+
+router = APIRouter()
+
+class OrganizationUpsert(BaseModel):
+    org_id: str
+    name: str | None = None
+    slug: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+class StockContextItem(BaseModel):
+    sku: str
+    name: str
+    category: str | None = None
+    current_stock: int = 0
+    note: str | None = None
+
+class StockContextIngest(BaseModel):
+    org_id: str
+    source_mode: str = "AUTO"
+    items: list[StockContextItem]
+
+class SeedSampleDataIn(BaseModel):
+    org_id: str
+    seed_tag: str | None = None
 
 @router.get("/")
 def read_root():
@@ -274,6 +302,220 @@ async def ai_inventory_replenishment(payload: InventoryReplenishmentRequest):
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Inventory replenishment prediction failed"))
     return {"status": "success", "data": result.get("result", {})}
+@router.post("/orgs/upsert")
+async def upsert_organization(payload: OrganizationUpsert, db: AsyncSession = Depends(get_db)):
+    stmt = select(Organization).where(Organization.org_id == payload.org_id)
+    result = await db.execute(stmt)
+    org = result.scalar_one_or_none()
+
+    if org:
+        if payload.name is not None:
+            org.name = payload.name
+        if payload.slug is not None:
+            org.slug = payload.slug
+        if payload.email is not None:
+            org.email = payload.email
+        if payload.phone is not None:
+            org.phone = payload.phone
+    else:
+        org = Organization(
+            org_id=payload.org_id,
+            name=payload.name,
+            slug=payload.slug,
+            email=payload.email,
+            phone=payload.phone,
+        )
+        db.add(org)
+
+    await db.commit()
+    await db.refresh(org)
+
+    return {
+        "status": "success",
+        "data": {
+            "org_id": org.org_id,
+            "name": org.name,
+            "slug": org.slug,
+            "email": org.email,
+            "phone": org.phone,
+        },
+    }
+
+@router.delete("/orgs/{org_id}")
+async def delete_organization(org_id: str, db: AsyncSession = Depends(get_db)):
+    stmt = select(Organization).where(Organization.org_id == org_id)
+    result = await db.execute(stmt)
+    org = result.scalar_one_or_none()
+    if not org:
+        return {"status": "success", "deleted": False}
+
+    await db.delete(org)
+    await db.commit()
+    return {"status": "success", "deleted": True}
+
+@router.post("/stock-context/ingest")
+async def ingest_stock_context(payload: StockContextIngest, db: AsyncSession = Depends(get_db)):
+    inserted = 0
+    for item in payload.items:
+        entry = StockContextEntry(
+            org_id=payload.org_id,
+            source_mode=payload.source_mode.upper(),
+            sku=item.sku,
+            name=item.name,
+            category=item.category,
+            current_stock=item.current_stock,
+            note=item.note,
+        )
+        db.add(entry)
+        inserted += 1
+
+    await db.commit()
+
+    return {
+        "status": "success",
+        "data": {
+            "org_id": payload.org_id,
+            "source_mode": payload.source_mode.upper(),
+            "inserted": inserted,
+        },
+    }
+
+@router.get("/stock-context/manual-check")
+async def get_stock_context_manual_check(org_id: str, db: AsyncSession = Depends(get_db)):
+    stmt = (
+        select(StockContextEntry)
+        .where(StockContextEntry.org_id == org_id)
+        .order_by(desc(StockContextEntry.captured_at))
+        .limit(50)
+    )
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+
+    return {
+        "status": "success",
+        "data": [
+            {
+                "id": row.id,
+                "org_id": row.org_id,
+                "source_mode": row.source_mode,
+                "sku": row.sku,
+                "name": row.name,
+                "category": row.category,
+                "current_stock": row.current_stock,
+                "note": row.note,
+                "captured_at": row.captured_at.isoformat() if row.captured_at else None,
+            }
+            for row in rows
+        ],
+    }
+
+@router.post("/seed/sample-data")
+async def seed_sample_data(payload: SeedSampleDataIn, db: AsyncSession = Depends(get_db)):
+    seed_tag = payload.seed_tag or str(int(datetime.utcnow().timestamp()))
+
+    org_stmt = select(Organization).where(Organization.org_id == payload.org_id)
+    org_result = await db.execute(org_stmt)
+    org = org_result.scalar_one_or_none()
+    if not org:
+        org = Organization(org_id=payload.org_id, name=f"Seed Org {seed_tag}")
+        db.add(org)
+        await db.flush()
+
+    competitor_specs = [
+        {
+            "name": f"seed-fashion-a-{seed_tag}",
+            "url": f"seed-fashion-a-{seed_tag}.local",
+            "products": [
+                {"name": "Seed Kurta Premium", "category": "kurtas", "price": 99.0},
+                {"name": "Seed Saree Silk", "category": "sarees", "price": 149.5},
+            ],
+        },
+        {
+            "name": f"seed-fashion-b-{seed_tag}",
+            "url": f"seed-fashion-b-{seed_tag}.local",
+            "products": [
+                {"name": "Seed Kurta Classic", "category": "kurtas", "price": 79.0},
+                {"name": "Seed Jacket Heritage", "category": "jackets", "price": 119.0},
+            ],
+        },
+    ]
+
+    competitors_created = 0
+    products_created = 0
+    sentiments_created = 0
+
+    for spec in competitor_specs:
+        comp = Competitor(org_id=payload.org_id, name=spec["name"], url=spec["url"])
+        db.add(comp)
+        await db.flush()
+        competitors_created += 1
+
+        for idx, pd in enumerate(spec["products"]):
+            product = Product(
+                competitor_id=comp.id,
+                name=pd["name"],
+                category=pd["category"],
+                url=f"https://{spec['url']}/products/{seed_tag}-{idx}",
+                image_url=f"https://{spec['url']}/images/{seed_tag}-{idx}.jpg",
+            )
+            db.add(product)
+            await db.flush()
+            products_created += 1
+
+            db.add(
+                ProductPriceHistory(
+                    product_id=product.id,
+                    price=pd["price"],
+                    currency="USD",
+                    recorded_at=datetime.utcnow() - timedelta(days=3),
+                )
+            )
+            db.add(
+                ProductPriceHistory(
+                    product_id=product.id,
+                    price=round(pd["price"] * 1.05, 2),
+                    currency="USD",
+                    recorded_at=datetime.utcnow() - timedelta(days=1),
+                )
+            )
+
+        for label, score, suffix in [("Negative", -0.72, "n"), ("Positive", 0.64, "p")]:
+            db.add(
+                SocialPostSentiment(
+                    competitor_id=comp.id,
+                    post_url=f"https://social.seed/{spec['url']}/{suffix}/{seed_tag}",
+                    content_text=f"Seed {label.lower()} sentiment sample for {spec['name']}",
+                    sentiment_score=score,
+                    sentiment_label=label,
+                    analyzed_at=datetime.utcnow(),
+                )
+            )
+            sentiments_created += 1
+
+    db.add(
+        TrendReport(
+            org_id=payload.org_id,
+            generated_at=datetime.utcnow(),
+            report_data={
+                "summary": "Seeded analytics report",
+                "ai_executive_summary": "Seeded report summary for dashboard validation.",
+                "seed_tag": seed_tag,
+            },
+        )
+    )
+
+    await db.commit()
+
+    return {
+        "status": "success",
+        "data": {
+            "org_id": payload.org_id,
+            "seed_tag": seed_tag,
+            "competitors_created": competitors_created,
+            "products_created": products_created,
+            "sentiments_created": sentiments_created,
+        },
+    }
 
 @router.post("/scrape")
 async def trigger_scrape(url: str, org_id: str, db: AsyncSession = Depends(get_db)):
@@ -344,9 +586,21 @@ async def get_competitors_summary(org_id: str, db: AsyncSession = Depends(get_db
         )
         count = product_count.scalar() or 0
         
-        avg_price_stmt = select(func.avg(Product.price)).filter(Product.competitor_id == comp.id)
+        avg_price_stmt = (
+            select(func.avg(ProductPriceHistory.price))
+            .join(Product, ProductPriceHistory.product_id == Product.id)
+            .filter(Product.competitor_id == comp.id)
+        )
         avg_price_result = await db.execute(avg_price_stmt)
         avg_price = float(avg_price_result.scalar() or 0)
+
+        last_scraped_stmt = (
+            select(func.max(ProductPriceHistory.recorded_at))
+            .join(Product, ProductPriceHistory.product_id == Product.id)
+            .filter(Product.competitor_id == comp.id)
+        )
+        last_scraped_result = await db.execute(last_scraped_stmt)
+        last_scraped = last_scraped_result.scalar()
         
         summary.append({
             "id": comp.id,
@@ -354,7 +608,7 @@ async def get_competitors_summary(org_id: str, db: AsyncSession = Depends(get_db
             "url": comp.url,
             "product_count": count,
             "avg_price": round(avg_price, 2),
-            "last_scraped": comp.created_at.isoformat() if hasattr(comp, 'created_at') else None
+            "last_scraped": last_scraped.isoformat() if last_scraped else None
         })
     
     return {"status": "success", "data": summary}
@@ -404,7 +658,9 @@ async def get_pricing_trends(org_id: str, days: int = 30, db: AsyncSession = Dep
     
     cutoff_date = datetime.utcnow() - timedelta(days=days)
     
-    stmt = select(ProductPriceHistory).join(
+    stmt = select(ProductPriceHistory).options(
+        selectinload(ProductPriceHistory.product).selectinload(Product.competitor)
+    ).join(
         Product, ProductPriceHistory.product_id == Product.id
     ).join(
         Competitor, Product.competitor_id == Competitor.id
@@ -493,11 +749,14 @@ async def get_products_paginated(org_id: str, page: int = 1, limit: int = 20, db
     """Get products with pagination and filtering"""
     offset = (page - 1) * limit
     
-    stmt = select(Product).join(
+    stmt = select(Product).options(
+        selectinload(Product.competitor),
+        selectinload(Product.price_history),
+    ).join(
         Competitor, Product.competitor_id == Competitor.id
     ).filter(
         Competitor.org_id == org_id
-    ).order_by(Product.created_at.desc()).offset(offset).limit(limit)
+    ).order_by(Product.id.desc()).offset(offset).limit(limit)
     
     result = await db.execute(stmt)
     products = result.scalars().all()
@@ -510,18 +769,23 @@ async def get_products_paginated(org_id: str, page: int = 1, limit: int = 20, db
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
     
-    data = [
-        {
-            "id": p.id,
-            "name": p.name,
-            "category": p.category,
-            "price": p.price,
-            "currency": p.currency,
-            "image_url": p.image_url,
-            "competitor": p.competitor.name if p.competitor else "Unknown"
-        }
-        for p in products
-    ]
+    data = []
+    for p in products:
+        latest_entry = None
+        if p.price_history:
+            latest_entry = max(p.price_history, key=lambda x: x.recorded_at)
+
+        data.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "category": p.category,
+                "price": float(latest_entry.price) if latest_entry else 0,
+                "currency": latest_entry.currency if latest_entry else "USD",
+                "image_url": p.image_url,
+                "competitor": p.competitor.name if p.competitor else "Unknown",
+            }
+        )
     
     return {
         "status": "success",

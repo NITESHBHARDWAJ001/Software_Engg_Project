@@ -12,6 +12,7 @@ import {
   FiFrown,
   FiTarget,
   FiActivity,
+  FiAlertCircle,
 } from 'react-icons/fi';
 import {
   socialApiService,
@@ -145,6 +146,48 @@ const AnalyticsPage: React.FC = () => {
     return num.toString();
   };
 
+  const topReel = reels.reduce<SocialReel | null>((best, reel) => {
+    if (!best) return reel;
+    return reel.engagementRate > best.engagementRate ? reel : best;
+  }, null);
+
+  const weakSentiment = sentimentData
+    ? sentimentData.negativePercent > 20
+      ? 'negative'
+      : sentimentData.neutralPercent > 45
+      ? 'neutral'
+      : null
+    : null;
+
+  const actionableInsights = [
+    topReel
+      ? {
+          title: 'Scale winning content',
+          description: `Top reel engagement is ${topReel.engagementRate.toFixed(1)}%. Repurpose this format across next 3 posts.`,
+          priority: 'HIGH',
+        }
+      : null,
+    sentimentData
+      ? {
+          title: 'Sentiment watch',
+          description:
+            weakSentiment === 'negative'
+              ? `Negative sentiment is ${sentimentData.negativePercent.toFixed(1)}%. Respond to top concerns within 24h.`
+              : weakSentiment === 'neutral'
+              ? `Neutral sentiment is ${sentimentData.neutralPercent.toFixed(1)}%. Add clearer offers and stronger CTAs.`
+              : `Positive sentiment is healthy at ${sentimentData.positivePercent.toFixed(1)}%. Keep current messaging style.`,
+          priority: weakSentiment ? 'MEDIUM' : 'LOW',
+        }
+      : null,
+    campaigns.length > 0
+      ? {
+          title: 'Campaign conversion focus',
+          description: `Active campaigns: ${campaigns.length}. Move budget to campaigns with strongest comment/share ratio.`,
+          priority: 'MEDIUM',
+        }
+      : null,
+  ].filter(Boolean) as Array<{ title: string; description: string; priority: 'HIGH' | 'MEDIUM' | 'LOW' }>;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -252,6 +295,31 @@ const AnalyticsPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {actionableInsights.length > 0 && (
+        <Card>
+          <CardHeader title="Actionable Insights" subtitle="Prioritized recommendations from current analytics" />
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {actionableInsights.map((insight, index) => (
+                <div key={`${insight.title}-${index}`} className="rounded-lg border border-gray-200 p-4 bg-white">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">{insight.title}</h3>
+                    <Badge variant={insight.priority === 'HIGH' ? 'danger' : insight.priority === 'MEDIUM' ? 'warning' : 'info'}>
+                      {insight.priority}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">{insight.description}</p>
+                  <div className="mt-3 text-xs text-gray-500 flex items-center gap-1">
+                    <FiAlertCircle className="w-3 h-3" />
+                    Review this in your weekly growth plan
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs */}

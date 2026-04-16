@@ -6,7 +6,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 # Rely on environment-driven Pydantic configuration for production database connection
-DATABASE_URL = settings.DATABASE_URL
+DATABASE_URL = settings.db_url
 
 engine = create_async_engine(DATABASE_URL, echo=True)
 

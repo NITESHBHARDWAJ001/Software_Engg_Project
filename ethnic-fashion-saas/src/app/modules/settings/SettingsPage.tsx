@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fi';
 import { useAuthStore } from '../../../store/authStore';
 import { useOrganizationStore } from '../../../store/organizationStore';
-import { formatCurrency, formatDate } from '../../../utils/helpers';
+import { downloadFile, formatCurrency, formatDate } from '../../../utils/helpers';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
@@ -167,6 +167,44 @@ const SettingsPage: React.FC = () => {
     } finally {
       setUpgradingPlanId(null);
     }
+  };
+
+  const csvEscape = (value: string | number) => {
+    const text = String(value);
+    if (/[",\n]/.test(text)) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  };
+
+  const billingHistory = [0, 1, 2].map((offset) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - offset);
+
+    return {
+      date: date.toISOString().slice(0, 10),
+      amount: getCurrentPlanPrice(),
+      status: 'Paid',
+      planCode: currentOrganization?.subscriptionPlan || 'PLAN',
+    };
+  });
+
+  const downloadBillingReceipt = (bill: { date: string; amount: number; status: string; planCode: string }) => {
+    const rows = [
+      ['Organization', currentOrganization?.name || ''],
+      ['Plan', bill.planCode],
+      ['Billing Date', bill.date],
+      ['Amount', String(bill.amount)],
+      ['Status', bill.status],
+    ];
+
+    const csv = rows.map((row) => row.map((value) => csvEscape(value)).join(',')).join('\n');
+    const safePlanCode = bill.planCode.replace(/[^A-Z0-9_-]/gi, '_').toUpperCase();
+    downloadFile(
+      new Blob([csv], { type: 'text/csv;charset=utf-8;' }),
+      `subscription-${safePlanCode}-${bill.date}.csv`,
+    );
+    toast.success(`Downloaded subscription receipt for ${formatDate(new Date(bill.date))}`);
   };
 
   return (
@@ -679,11 +717,7 @@ const SettingsPage: React.FC = () => {
             <CardHeader title="Billing History" />
             <CardContent className="p-6">
               <div className="space-y-3">
-                {[
-                  { date: '2026-02-01', amount: 2999, status: 'Paid' },
-                  { date: '2026-01-01', amount: 2999, status: 'Paid' },
-                  { date: '2025-12-01', amount: 2999, status: 'Paid' },
-                ].map((bill, index) => (
+                {billingHistory.map((bill, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
@@ -697,7 +731,7 @@ const SettingsPage: React.FC = () => {
                     <div className="flex items-center gap-4">
                       <p className="font-semibold text-gray-900">{formatCurrency(bill.amount)}</p>
                       <Badge variant="success">{bill.status}</Badge>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => downloadBillingReceipt(bill)}>
                         Download
                       </Button>
                     </div>

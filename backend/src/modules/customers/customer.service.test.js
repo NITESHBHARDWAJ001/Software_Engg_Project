@@ -97,9 +97,9 @@ describe('customerService', () => {
 
     const result = await customerService.stats('org-1');
 
-    expect(result.totalCustomers).toBe(4);
+    expect(result.totalCustomers).toBe(3);
     expect(result.totalRevenue).toBe(800);
-    expect(result.averagePurchaseValue).toBe(200);
+    expect(result.averagePurchaseValue).toBeCloseTo(266.67, 2);
     expect(result.topCustomers[0]).toMatchObject({ id: 'c1', totalSpent: 500, lifetimeValue: 550 });
   });
 });

@@ -4,6 +4,7 @@ from urllib.parse import quote_plus
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Analytics Service"
     ENVIRONMENT: str = "local"
+    DATABASE_URL: str | None = None
 
     # Postgres configuration — override via .env
     POSTGRES_USER: str = "postgres"
@@ -16,8 +17,16 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = "gsk_placeholder"
 
     @property
-    def DATABASE_URL(self) -> str:
-        # Always PostgreSQL — password is URL-encoded to handle special chars like @
+    def db_url(self) -> str:
+        # Prefer backend-style DATABASE_URL when provided.
+        if self.DATABASE_URL:
+            if self.DATABASE_URL.startswith("postgresql+asyncpg://"):
+                return self.DATABASE_URL
+            if self.DATABASE_URL.startswith("postgresql://"):
+                return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return self.DATABASE_URL
+
+        # Fallback to discrete postgres fields.
         pwd = quote_plus(self.POSTGRES_PASSWORD)
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{pwd}"

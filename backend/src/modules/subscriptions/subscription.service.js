@@ -5,7 +5,7 @@ import { HttpError } from '../../shared/http/httpError.js';
 
 const ACTIVE_STATES = ['TRIALING', 'ACTIVE', 'PAST_DUE'];
 const FREE_PLAN_CODE = 'FREE';
-const FREE_PLAN_FEATURES = ['CUSTOMER_MANAGEMENT', 'INVENTORY_MANAGEMENT'];
+const FREE_PLAN_FEATURES = ['CUSTOMER_MANAGEMENT', 'INVENTORY_MANAGEMENT', 'ANALYTICS_MANAGEMENT'];
 
 const toNumber = (value) => Number(value ?? 0);
 
@@ -35,6 +35,17 @@ const resolveEffectiveFeatures = (subscription) => {
   }
 
   return [...baseFeatures];
+};
+
+const MODULE_ACCESS_METADATA_KEY = 'moduleAccessPolicies';
+
+const normalizeRoleKey = (role) => String(role || '').toUpperCase();
+
+const getModulePoliciesFromMetadata = (metadata) => {
+  if (!metadata || typeof metadata !== 'object') return {};
+  const policies = metadata[MODULE_ACCESS_METADATA_KEY];
+  if (!policies || typeof policies !== 'object') return {};
+  return policies;
 };
 
 export const subscriptionService = {
@@ -347,6 +358,73 @@ export const subscriptionService = {
     }
 
     return current.effectiveFeatures.includes(featureKey);
+  },
+
+  async getModuleAccessPolicy(organizationId, role, moduleKey) {
+    const current = await this.getOrganizationCurrentSubscription(organizationId);
+    if (!current) {
+      return {
+        allowed: true,
+        limits: {},
+      };
+    }
+
+    const roleKey = normalizeRoleKey(role);
+    const policies = getModulePoliciesFromMetadata(current.metadata);
+    const rolePolicies = policies[roleKey] ?? {};
+    const modulePolicy = rolePolicies[moduleKey] ?? null;
+
+    if (!modulePolicy) {
+      return {
+        allowed: true,
+        limits: {},
+      };
+    }
+
+    return {
+      allowed: modulePolicy.allowed !== false,
+      limits: modulePolicy.limits && typeof modulePolicy.limits === 'object' ? modulePolicy.limits : {},
+    };
+  },
+
+  async updateOrganizationModuleAccess(organizationId, actorUserId, payload) {
+    const current = await prisma.organizationSubscription.findFirst({
+      where: {
+        organizationId,
+        status: { in: ACTIVE_STATES },
+      },
+      orderBy: { startDate: 'desc' },
+      include: { plan: true },
+    });
+
+    if (!current) {
+      throw new HttpError(404, 'No active subscription found for organization', 'SUBSCRIPTION_NOT_FOUND');
+    }
+
+    const existingMetadata = current.metadata && typeof current.metadata === 'object' ? current.metadata : {};
+    const mergedPolicies = {
+      ...getModulePoliciesFromMetadata(existingMetadata),
+      ...payload.moduleAccessPolicies,
+    };
+
+    const updated = await prisma.organizationSubscription.update({
+      where: { id: current.id },
+      data: {
+        metadata: {
+          ...existingMetadata,
+          [MODULE_ACCESS_METADATA_KEY]: mergedPolicies,
+        },
+        updatedBy: actorUserId,
+      },
+      include: { plan: true },
+    });
+
+    const mapped = mapSubscription(updated);
+    return {
+      ...mapped,
+      effectiveFeatures: resolveEffectiveFeatures(mapped),
+      moduleAccessPolicies: mergedPolicies,
+    };
   },
 
   async mockCheckoutAndActivate(organizationId, userId, payload) {

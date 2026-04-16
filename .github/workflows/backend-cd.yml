@@ -1,4 +1,4 @@
-name: Backend CD
+name: Backend CD - Build & Deploy
 
 on:
   workflow_dispatch:
@@ -7,22 +7,33 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/backend-cd.yml'
+      - 'docker-compose.yml'
 
 permissions:
   contents: read
   packages: write
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: niteshbhardwaj001/software_engg_project/backend
+  DOCKER_BUILDKIT: 1
+
 jobs:
-  docker:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Login to GHCR
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -30,13 +41,15 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/backend
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=backend,enable=${{ github.ref == 'refs/heads/Backend' }}
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-      - name: Build and push image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: backend
@@ -44,3 +57,151 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test-image:
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Docker image health
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
+          JWT_ACCESS_SECRET: test-access-secret-long-enough-for-testing
+          JWT_REFRESH_SECRET: test-refresh-secret-long-enough-for-testing
+          JWT_ACCESS_EXPIRES_IN: 15m
+          JWT_REFRESH_EXPIRES_IN_DAYS: 7
+          CORS_ORIGIN: http://localhost:3000
+          ANALYTICS_SERVICE_URL: http://localhost:8000
+          ANALYTICS_ORG_SYNC_INTERVAL_MS: 86400000
+          PORT: 4000
+          NODE_ENV: test
+        run: |
+          # Pull the built image
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Run container with health check
+          docker run -d \
+            --name backend-test \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET" \
+            -e JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
+            -e JWT_ACCESS_EXPIRES_IN="$JWT_ACCESS_EXPIRES_IN" \
+            -e JWT_REFRESH_EXPIRES_IN_DAYS="$JWT_REFRESH_EXPIRES_IN_DAYS" \
+            -e CORS_ORIGIN="$CORS_ORIGIN" \
+            -e ANALYTICS_SERVICE_URL="$ANALYTICS_SERVICE_URL" \
+            -e ANALYTICS_ORG_SYNC_INTERVAL_MS="$ANALYTICS_ORG_SYNC_INTERVAL_MS" \
+            -e PORT="$PORT" \
+            -e NODE_ENV="$NODE_ENV" \
+            --network host \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Wait for container to be healthy
+          for i in {1..30}; do
+            if docker exec backend-test wget --quiet --tries=1 --spider http://localhost:4000/health/live || true; then
+              echo "Container is healthy"
+              docker stop backend-test
+              exit 0
+            fi
+            echo "Waiting for health check... ($i/30)"
+            sleep 2
+          done
+          
+          echo "Container failed health check"
+          docker logs backend-test
+          docker stop backend-test
+          exit 1
+
+  deploy:
+    needs: test-image
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/Backend'
+    environment:
+      name: production
+      url: https://api.your-domain.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to production
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          echo "Deploying backend..."
+          echo "Repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "Deployment target: Render"
+
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+            echo "Render deploy hook triggered successfully."
+          else
+            echo "RENDER_DEPLOY_HOOK_URL not set. Skipping deploy trigger."
+            echo "Add secret RENDER_DEPLOY_HOOK_URL in repository settings."
+          fi
+
+      - name: Health check
+        continue-on-error: true
+        if: ${{ secrets.RENDER_HEALTHCHECK_URL != '' }}
+        run: |
+          echo "Running health checks..."
+          
+          for i in {1..10}; do
+            if curl -f "${{ secrets.RENDER_HEALTHCHECK_URL }}" -m 10; then
+              echo "✓ Backend health check passed"
+              exit 0
+            fi
+            echo "Health check attempt $i/10 failed, retrying..."
+            sleep 5
+          done
+          
+          echo "✗ Backend failed health check"
+          exit 1
+
+  notify:
+    needs: [build, test-image, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build**: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tests**: ${{ needs.test-image.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy**: ${{ needs.deploy.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

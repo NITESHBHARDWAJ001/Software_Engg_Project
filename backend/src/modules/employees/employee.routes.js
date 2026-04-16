@@ -7,6 +7,7 @@ import { ok, paged } from '../../shared/http/response.js';
 import {
   employeeCreateSchema,
   employeeListQuerySchema,
+  employeeModuleAccessUpdateSchema,
   employeeStatusSchema,
   employeeUpdateSchema,
 } from './employee.schemas.js';
@@ -74,4 +75,29 @@ employeeRouter.patch('/:id/status', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (r
   const employee = await employeeService.setStatus(organizationId, id, payload.isActive);
 
   res.json(ok(employee, payload.isActive ? 'Employee activated' : 'Employee deactivated'));
+});
+
+employeeRouter.get('/:id/module-access', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+  const organizationId = getOrganizationScope(req);
+  if (!organizationId) {
+    throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+  }
+
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const result = await employeeService.getModuleAccess(organizationId, id);
+
+  res.json(ok(result));
+});
+
+employeeRouter.patch('/:id/module-access', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+  const organizationId = getOrganizationScope(req);
+  if (!organizationId) {
+    throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+  }
+
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const payload = employeeModuleAccessUpdateSchema.parse(req.body);
+  const result = await employeeService.updateModuleAccess(organizationId, req.auth.userId, id, payload.moduleAccessPolicies);
+
+  res.json(ok(result, 'Employee module access updated successfully'));
 });

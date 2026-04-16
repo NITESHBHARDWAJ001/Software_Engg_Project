@@ -3,6 +3,56 @@ import { logger } from '../../config/logger.js';
 const ANALYTICS_URL = process.env.ANALYTICS_SERVICE_URL || 'http://127.0.0.1:8000/api/v1';
 
 export class AnalyticsService {
+  async upsertOrganization(payload) {
+    logger.info({ orgId: payload.orgId }, 'Integration: Upserting organization in analytics service');
+    const res = await fetch(`${ANALYTICS_URL}/orgs/upsert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        org_id: payload.orgId,
+        name: payload.name,
+        slug: payload.slug,
+        email: payload.email,
+        phone: payload.phone,
+      }),
+    });
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async deleteOrganization(orgId) {
+    logger.info({ orgId }, 'Integration: Deleting organization from analytics service');
+    const res = await fetch(`${ANALYTICS_URL}/orgs/${encodeURIComponent(orgId)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async ingestStockContext(orgId, sourceMode, items) {
+    logger.info({ orgId, sourceMode, itemCount: items.length }, 'Integration: Ingesting stock context into analytics service');
+    const res = await fetch(`${ANALYTICS_URL}/stock-context/ingest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        org_id: orgId,
+        source_mode: sourceMode,
+        items,
+      }),
+    });
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
+  async getStockContextManualCheck(orgId) {
+    logger.info({ orgId }, 'Integration: Fetching stock context manual check from analytics service');
+    const res = await fetch(`${ANALYTICS_URL}/stock-context/manual-check?org_id=${encodeURIComponent(orgId)}`);
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
+
   async triggerScrape(url, orgId) {
     logger.info({ url, orgId }, 'Integration: Triggering competitor scrape via Python Analytics microservice');
     const res = await fetch(`${ANALYTICS_URL}/scrape?url=${encodeURIComponent(url)}&org_id=${encodeURIComponent(orgId)}`, { method: 'POST' });

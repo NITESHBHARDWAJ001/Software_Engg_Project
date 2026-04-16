@@ -427,6 +427,10 @@ export const superAdminService = {
     return mapSaasPlan(res.data);
   },
 
+  async deletePlan(planId: string): Promise<SaasPlan> {
+    return this.deactivatePlan(planId);
+  },
+
   async runMockCheckout(payload: MockCheckoutPayload): Promise<MockCheckoutResult> {
     const res = await request<ApiSuccess<MockCheckoutResult>>('/v1/subscriptions/mock-checkout', {
       method: 'POST',

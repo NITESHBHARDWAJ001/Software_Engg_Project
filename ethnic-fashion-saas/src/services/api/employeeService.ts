@@ -60,6 +60,24 @@ export type UpdateEmployeePayload = {
   isActive?: boolean;
 };
 
+export type EmployeeModuleKey =
+  | 'CUSTOMER_MANAGEMENT'
+  | 'INVENTORY_MANAGEMENT'
+  | 'FINANCE_MANAGEMENT'
+  | 'TASK_MANAGEMENT'
+  | 'EXHIBITION_MANAGEMENT'
+  | 'ANALYTICS_MANAGEMENT';
+
+export type EmployeeModulePolicy = {
+  allowed: boolean;
+  limits?: Record<string, string | number | boolean>;
+};
+
+export type EmployeeModuleAccess = {
+  employeeId: string;
+  moduleAccessPolicies: Record<EmployeeModuleKey, EmployeeModulePolicy>;
+};
+
 const buildHeaders = () => {
   const token = useAuthStore.getState().token;
   return {
@@ -112,6 +130,22 @@ export const employeeService = {
     const res = await request<ApiSuccess<Employee>>(`/v1/employees/${employeeId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ isActive }),
+    });
+    return res.data;
+  },
+
+  async getEmployeeModuleAccess(employeeId: string): Promise<EmployeeModuleAccess> {
+    const res = await request<ApiSuccess<EmployeeModuleAccess>>(`/v1/employees/${employeeId}/module-access`);
+    return res.data;
+  },
+
+  async updateEmployeeModuleAccess(
+    employeeId: string,
+    moduleAccessPolicies: Record<EmployeeModuleKey, EmployeeModulePolicy>
+  ): Promise<EmployeeModuleAccess> {
+    const res = await request<ApiSuccess<EmployeeModuleAccess>>(`/v1/employees/${employeeId}/module-access`, {
+      method: 'PATCH',
+      body: JSON.stringify({ moduleAccessPolicies }),
     });
     return res.data;
   },

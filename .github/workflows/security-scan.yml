@@ -1,0 +1,84 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, Backend]
+  pull_request:
+    branches: [main, Backend]
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly Sunday at 2 AM
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security tab
+        if: vars.ENABLE_CODE_SCANNING == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        directory: ['backend', 'ethnic-fashion-saas']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run npm audit
+        working-directory: ${{ matrix.directory }}
+        run: npm audit --audit-level=moderate || true
+
+      - name: Check for high vulnerabilities
+        working-directory: ${{ matrix.directory }}
+        run: |
+          if npm audit --json | jq -e '.vulnerabilities | to_entries | map(select(.value.severity=="high" or .value.severity=="critical")) | length > 0' > /dev/null; then
+            echo "❌ High or critical vulnerabilities found!"
+            npm audit
+            exit 1
+          fi
+
+  dockerfile-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy on Dockerfiles
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-docker-results.sarif'
+
+      - name: Upload results
+        if: vars.ENABLE_CODE_SCANNING == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-docker-results.sarif'

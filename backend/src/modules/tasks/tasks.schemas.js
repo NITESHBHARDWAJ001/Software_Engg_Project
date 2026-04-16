@@ -6,6 +6,7 @@ const taskPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 export const taskListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
+  scope: z.enum(['MY', 'GLOBAL']).default('GLOBAL'),
   search: z.string().optional(),
   status: z.enum(taskStatuses).optional(),
   priority: z.enum(taskPriorities).optional(),
