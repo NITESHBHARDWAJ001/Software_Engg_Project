@@ -273,7 +273,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {user.role !== UserRole.STAFF && stats.customerRfm && (
+      {stats.customerRfm && (
         <Card>
           <CardHeader title="Customer RFM" subtitle="Behavioral customer segments for the organization" />
           <CardBody>
