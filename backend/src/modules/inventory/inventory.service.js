@@ -233,6 +233,66 @@ export const inventoryService = {
     });
   },
 
+  async listMovements(organizationId, page, pageSize, changeType, search) {
+    const where = {
+      organizationId,
+      ...(changeType ? { changeType } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                item: {
+                  name: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+              {
+                item: {
+                  sku: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+              {
+                note: {
+                  contains: search,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, movements] = await Promise.all([
+      prisma.inventoryMovement.count({ where }),
+      prisma.inventoryMovement.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          item: {
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              category: true,
+              currentStock: true,
+              sellingPrice: true,
+              unit: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return { total, movements };
+  },
+
   async listForAnalytics(organizationId, limit = 200) {
     const items = await prisma.inventoryItem.findMany({
       where: { organizationId },

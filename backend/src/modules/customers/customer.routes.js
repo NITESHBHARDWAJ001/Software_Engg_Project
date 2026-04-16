@@ -8,6 +8,7 @@ import { HttpError } from '../../shared/http/httpError.js';
 import { ok, paged } from '../../shared/http/response.js';
 import { requireFeatureAccess } from '../../shared/middleware/featureAccess.js';
 import { requireModuleAccess } from '../../shared/middleware/moduleAccess.js';
+import { customerStatusSchema } from './customer.schemas.js';
 
 const SUPER_ADMIN = 'SUPER_ADMIN';
 const ORG_ADMIN = 'ORG_ADMIN';
@@ -57,7 +58,7 @@ customerRouter.get('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req
   res.json(ok(customer));
 });
 
-customerRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+customerRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);
   if (!orgId) {
     throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
@@ -68,7 +69,7 @@ customerRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) =>
   res.status(201).json(ok(customer, 'Customer created'));
 });
 
-customerRouter.patch('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+customerRouter.patch('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);
   if (!orgId) {
     throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
@@ -80,7 +81,19 @@ customerRouter.patch('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res
   res.json(ok(customer, 'Customer updated'));
 });
 
-customerRouter.delete('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+customerRouter.patch('/:id/status', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
+  const orgId = getOrganizationScope(req);
+  if (!orgId) {
+    throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+  }
+
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const payload = customerStatusSchema.parse(req.body);
+  const customer = await customerService.setArchivedState(orgId, id, req.auth.userId, payload.isArchived);
+  res.json(ok(customer, payload.isArchived ? 'Customer deactivated' : 'Customer activated'));
+});
+
+customerRouter.delete('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);
   if (!orgId) {
     throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
@@ -88,5 +101,5 @@ customerRouter.delete('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, re
 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   await customerService.archive(orgId, id, req.auth.userId);
-  res.json(ok(null, 'Customer archived'));
+  res.json(ok(null, 'Customer deactivated'));
 });

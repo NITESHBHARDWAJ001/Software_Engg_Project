@@ -28,6 +28,26 @@ export type InventoryStats = {
   averageUnitPrice: number;
 };
 
+export type InventoryMovementRecord = {
+  id: string;
+  organizationId: string;
+  itemId: string;
+  changeType: 'IN' | 'OUT' | 'ADJUSTMENT';
+  quantity: number;
+  note?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  item?: {
+    id: string;
+    name: string;
+    sku: string;
+    category: string;
+    currentStock: number;
+    sellingPrice: number;
+    unit: string;
+  };
+};
+
 type ApiSuccess<T> = {
   success: true;
   message?: string;
@@ -62,6 +82,26 @@ type BackendInventory = {
   updatedAt: string;
 };
 
+type BackendMovement = {
+  id: string;
+  organizationId: string;
+  itemId: string;
+  changeType: 'IN' | 'OUT' | 'ADJUSTMENT';
+  quantity: number;
+  note?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  item?: {
+    id: string;
+    name: string;
+    sku: string;
+    category: string;
+    currentStock: number;
+    sellingPrice: string | number;
+    unit: string;
+  };
+};
+
 const toNumber = (value: string | number | undefined | null) => {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
@@ -86,6 +126,23 @@ const mapInventory = (item: BackendInventory): InventoryRecord => ({
   status: item.status,
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
+});
+
+const mapMovement = (row: BackendMovement): InventoryMovementRecord => ({
+  id: row.id,
+  organizationId: row.organizationId,
+  itemId: row.itemId,
+  changeType: row.changeType,
+  quantity: row.quantity,
+  note: row.note,
+  createdBy: row.createdBy,
+  createdAt: row.createdAt,
+  item: row.item
+    ? {
+        ...row.item,
+        sellingPrice: toNumber(row.item.sellingPrice),
+      }
+    : undefined,
 });
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -176,5 +233,22 @@ export const inventoryApiService = {
   async lowStockAlerts(): Promise<InventoryRecord[]> {
     const res = await request<ApiSuccess<BackendInventory[]>>('/v1/inventory/alerts/low-stock');
     return res.data.map(mapInventory);
+  },
+
+  async listMovements(params?: {
+    page?: number;
+    pageSize?: number;
+    changeType?: 'IN' | 'OUT' | 'ADJUSTMENT';
+    search?: string;
+  }): Promise<InventoryMovementRecord[]> {
+    const query = new URLSearchParams({
+      page: String(params?.page ?? 1),
+      pageSize: String(params?.pageSize ?? 100),
+    });
+    if (params?.changeType) query.set('changeType', params.changeType);
+    if (params?.search) query.set('search', params.search);
+
+    const res = await request<ApiPaged<BackendMovement[]>>(`/v1/inventory/movements?${query.toString()}`);
+    return res.data.map(mapMovement);
   },
 };

@@ -10,6 +10,7 @@ import {
   FiTrendingUp,
   FiAlertCircle,
   FiUser,
+  FiBarChart2,
 } from 'react-icons/fi';
 import { 
   LineChart, 
@@ -271,6 +272,66 @@ export default function Dashboard() {
           </CardBody>
         </Card>
       </div>
+
+      {stats.customerRfm && (
+        <Card>
+          <CardHeader title="Customer RFM" subtitle="Behavioral customer segments for the organization" />
+          <CardBody>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-2xl border border-success-100 bg-success-50/70 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-success-700">Champions</p>
+                    <p className="mt-2 text-2xl font-bold text-success-700">{stats.customerRfm.segments.CHAMPION}</p>
+                  </div>
+                  <FiBarChart2 className="w-5 h-5 text-success-600" />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-primary-100 bg-primary-50/70 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-primary-700">Loyal</p>
+                    <p className="mt-2 text-2xl font-bold text-primary-700">{stats.customerRfm.segments.LOYAL}</p>
+                  </div>
+                  <FiUsers className="w-5 h-5 text-primary-600" />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-warning-100 bg-warning-50/70 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-warning-700">Potential Loyalists</p>
+                    <p className="mt-2 text-2xl font-bold text-warning-700">{stats.customerRfm.segments.POTENTIAL_LOYALIST}</p>
+                  </div>
+                  <FiTrendingUp className="w-5 h-5 text-warning-600" />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-danger-100 bg-danger-50/70 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-danger-700">At Risk</p>
+                    <p className="mt-2 text-2xl font-bold text-danger-700">{stats.customerRfm.segments.AT_RISK}</p>
+                  </div>
+                  <FiAlertCircle className="w-5 h-5 text-danger-600" />
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+              <div className="rounded-xl bg-gray-50 p-4">
+                <div className="font-medium text-gray-900">Average recency</div>
+                <div className="mt-1">{stats.customerRfm.averageRecencyDays} days</div>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-4">
+                <div className="font-medium text-gray-900">Average frequency</div>
+                <div className="mt-1">{stats.customerRfm.averageFrequency} interactions</div>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-4">
+                <div className="font-medium text-gray-900">Average monetary</div>
+                <div className="mt-1">{formatCurrency(stats.customerRfm.averageMonetary)}</div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {currentOrganization && (
         <Card>

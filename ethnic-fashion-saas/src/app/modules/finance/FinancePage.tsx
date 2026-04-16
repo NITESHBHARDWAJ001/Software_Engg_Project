@@ -25,6 +25,14 @@ import {
   LedgerEntry,
   LedgerEntryType,
 } from '../../../services/api/financeService';
+import { customerApiService, type CustomerStats } from '../../../services/api/customerService';
+import { exhibitionService } from '../../../services/api/exhibitionService';
+import {
+  inventoryApiService,
+  type InventoryMovementRecord,
+  type InventoryRecord,
+  type InventoryStats,
+} from '../../../services/api/inventoryService';
 import { downloadFile, formatCurrency, formatDate } from '../../../utils/helpers';
 import { exportToExcel, exportToPDF, formatCurrencyForExport, formatDateForExport } from '../../../utils/exportUtils';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
@@ -57,6 +65,37 @@ type CashFlowData = {
 };
 
 type ActiveTab = 'dashboard' | 'invoices' | 'transactions' | 'reports';
+
+type RevenueSectionBreakdown = {
+  section: string;
+  value: number;
+};
+
+type SoldStockSummary = {
+  itemId: string;
+  itemName: string;
+  sku: string;
+  category: string;
+  soldUnits: number;
+  estimatedRevenue: number;
+  latestSoldAt: string;
+};
+
+type BusinessReportTemplateData = {
+  generatedOn: string;
+  customerStats: CustomerStats | null;
+  inventoryStats: InventoryStats | null;
+  topRevenueSections: RevenueSectionBreakdown[];
+  soldStockSummary: SoldStockSummary[];
+  topInventoryItems: InventoryRecord[];
+  outstandingInvoiceCount: number;
+  exhibitionTotals: {
+    totalExhibitions: number;
+    totalLeads: number;
+    totalRevenue: number;
+    conversionRate: number;
+  };
+};
 
 type NewInvoiceForm = {
   invoiceNumber: string;
@@ -101,6 +140,16 @@ const FinancePage: React.FC = () => {
   const [transactions, setTransactions] = useState<LedgerEntry[]>([]);
   const [trends, setTrends] = useState<FinanceTrend[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<FinanceInvoice | null>(null);
+  const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null);
+  const [inventoryStats, setInventoryStats] = useState<InventoryStats | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryRecord[]>([]);
+  const [soldMovements, setSoldMovements] = useState<InventoryMovementRecord[]>([]);
+  const [exhibitionTotals, setExhibitionTotals] = useState<BusinessReportTemplateData['exhibitionTotals']>({
+    totalExhibitions: 0,
+    totalLeads: 0,
+    totalRevenue: 0,
+    conversionRate: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [savingLedger, setSavingLedger] = useState(false);
@@ -142,10 +191,28 @@ const FinancePage: React.FC = () => {
         financeApiService.getTrends('month'),
       ]);
 
+      const [customerStatsData, inventoryStatsData, inventoryData, movementData, exhibitionStatsData] = await Promise.all([
+        customerApiService.stats(),
+        inventoryApiService.stats(),
+        inventoryApiService.list(),
+        inventoryApiService.listMovements({ changeType: 'OUT', pageSize: 200 }),
+        exhibitionService.getExhibitionStats(),
+      ]);
+
       setStats(statsData);
       setInvoices(invoicesData);
       setTransactions(ledgerData);
       setTrends(trendData);
+      setCustomerStats(customerStatsData);
+      setInventoryStats(inventoryStatsData);
+      setInventoryItems(inventoryData);
+      setSoldMovements(movementData);
+      setExhibitionTotals({
+        totalExhibitions: exhibitionStatsData.totalExhibitions,
+        totalLeads: exhibitionStatsData.totalLeads,
+        totalRevenue: exhibitionStatsData.totalRevenue,
+        conversionRate: exhibitionStatsData.conversionRate,
+      });
     } catch (error) {
       console.error('Failed to load finance data:', error);
     } finally {
@@ -175,6 +242,83 @@ const FinancePage: React.FC = () => {
     () => invoices.filter((inv) => filterStatus === 'all' || inv.status === filterStatus),
     [invoices, filterStatus],
   );
+
+  const revenueBySection = useMemo<RevenueSectionBreakdown[]>(() => {
+    const grouped = new Map<string, number>();
+
+    transactions
+      .filter((entry) => entry.type === 'INCOME')
+      .forEach((entry) => {
+        const section = entry.category?.trim() || 'Uncategorized Income';
+        grouped.set(section, (grouped.get(section) ?? 0) + entry.amount);
+      });
+
+    if (exhibitionTotals.totalRevenue > 0) {
+      grouped.set('Exhibitions', (grouped.get('Exhibitions') ?? 0) + exhibitionTotals.totalRevenue);
+    }
+
+    return [...grouped.entries()]
+      .map(([section, value]) => ({ section, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [transactions, exhibitionTotals.totalRevenue]);
+
+  const soldStockSummary = useMemo<SoldStockSummary[]>(() => {
+    const grouped = new Map<string, SoldStockSummary>();
+
+    soldMovements
+      .filter((movement) => movement.changeType === 'OUT')
+      .forEach((movement) => {
+        const key = movement.itemId;
+        const soldUnits = Math.abs(movement.quantity);
+        const existing = grouped.get(key);
+        const itemName = movement.item?.name || 'Unknown Item';
+        const sku = movement.item?.sku || '-';
+        const category = movement.item?.category || 'Uncategorized';
+        const sellingPrice = movement.item?.sellingPrice || 0;
+
+        if (!existing) {
+          grouped.set(key, {
+            itemId: key,
+            itemName,
+            sku,
+            category,
+            soldUnits,
+            estimatedRevenue: soldUnits * sellingPrice,
+            latestSoldAt: movement.createdAt,
+          });
+          return;
+        }
+
+        existing.soldUnits += soldUnits;
+        existing.estimatedRevenue += soldUnits * sellingPrice;
+        if (new Date(movement.createdAt).getTime() > new Date(existing.latestSoldAt).getTime()) {
+          existing.latestSoldAt = movement.createdAt;
+        }
+      });
+
+    return [...grouped.values()].sort((a, b) => b.soldUnits - a.soldUnits);
+  }, [soldMovements]);
+
+  const reportTemplateData = useMemo<BusinessReportTemplateData>(() => ({
+    generatedOn: formatDateForExport(new Date()),
+    customerStats,
+    inventoryStats,
+    topRevenueSections: revenueBySection.slice(0, 8),
+    soldStockSummary: soldStockSummary.slice(0, 10),
+    topInventoryItems: [...inventoryItems]
+      .sort((a, b) => b.currentStock * b.sellingPrice - a.currentStock * a.sellingPrice)
+      .slice(0, 8),
+    outstandingInvoiceCount: invoices.filter((invoice) => invoice.status === 'PENDING' || invoice.status === 'OVERDUE').length,
+    exhibitionTotals,
+  }), [
+    customerStats,
+    inventoryStats,
+    revenueBySection,
+    soldStockSummary,
+    inventoryItems,
+    invoices,
+    exhibitionTotals,
+  ]);
 
   const getInvoiceStatusColor = (status: InvoiceStatus): 'info' | 'warning' | 'success' | 'danger' => {
     if (status === 'DRAFT') return 'info';
@@ -490,6 +634,117 @@ const FinancePage: React.FC = () => {
       chartRefs,
     });
     toast.success('Exported Outstanding Invoices as PDF');
+  };
+
+  const exportTemplateReportToExcel = () => {
+    const overviewSheet = [{
+      'Report Date': reportTemplateData.generatedOn,
+      'Total Customers': reportTemplateData.customerStats?.totalCustomers ?? 0,
+      'Active Customers': reportTemplateData.customerStats?.activeCustomers ?? 0,
+      'Total Revenue': stats?.totalRevenue ?? 0,
+      'Total Expenses': stats?.totalExpenses ?? 0,
+      'Net Profit': stats?.netProfit ?? 0,
+      'Total Inventory Value': reportTemplateData.inventoryStats?.totalValue ?? 0,
+      'Outstanding Invoices': reportTemplateData.outstandingInvoiceCount,
+      'Exhibitions Revenue': reportTemplateData.exhibitionTotals.totalRevenue,
+    }];
+
+    const sectionSheet = reportTemplateData.topRevenueSections.map((row) => ({
+      Section: row.section,
+      Revenue: row.value,
+    }));
+
+    const soldSheet = reportTemplateData.soldStockSummary.map((row) => ({
+      Item: row.itemName,
+      SKU: row.sku,
+      Category: row.category,
+      'Sold Units': row.soldUnits,
+      'Estimated Revenue': row.estimatedRevenue,
+      'Latest Sold': formatDateForExport(row.latestSoldAt),
+    }));
+
+    const inventorySheet = reportTemplateData.topInventoryItems.map((row) => ({
+      Item: row.name,
+      SKU: row.sku,
+      Category: row.category,
+      Stock: row.currentStock,
+      'Sell Price': row.sellingPrice,
+      'Stock Value': row.currentStock * row.sellingPrice,
+    }));
+
+    exportToExcel([
+      { name: 'Executive Summary', data: overviewSheet },
+      { name: 'Revenue By Section', data: sectionSheet },
+      { name: 'Sold Stock', data: soldSheet },
+      { name: 'Top Inventory', data: inventorySheet },
+    ], `business-template-report-${formatDateForExport(new Date())}`);
+
+    toast.success('Exported business template report as Excel');
+  };
+
+  const exportTemplateReportToPDF = async () => {
+    const totalSoldUnits = reportTemplateData.soldStockSummary.reduce((sum, row) => sum + row.soldUnits, 0);
+    const estimatedSalesFromStock = reportTemplateData.soldStockSummary.reduce((sum, row) => sum + row.estimatedRevenue, 0);
+    const paidInvoicesCount = invoices.filter((invoice) => invoice.status === 'PAID').length;
+
+    const templateRows: Array<{ Section: string; Metric: string; Value: string }> = [
+      { Section: 'Customers', Metric: 'Total Customers', Value: String(reportTemplateData.customerStats?.totalCustomers ?? 0) },
+      { Section: 'Customers', Metric: 'Active Customers', Value: String(reportTemplateData.customerStats?.activeCustomers ?? 0) },
+      { Section: 'Customers', Metric: 'Inactive Customers', Value: String(reportTemplateData.customerStats?.inactiveCustomers ?? 0) },
+      { Section: 'Sales', Metric: 'Total Sold Units', Value: String(totalSoldUnits) },
+      { Section: 'Sales', Metric: 'Estimated Sales Revenue (from stock out)', Value: formatCurrencyForExport(estimatedSalesFromStock) },
+      { Section: 'Finance', Metric: 'Total Revenue', Value: formatCurrencyForExport(stats?.totalRevenue ?? 0) },
+      { Section: 'Finance', Metric: 'Total Expenses', Value: formatCurrencyForExport(stats?.totalExpenses ?? 0) },
+      { Section: 'Finance', Metric: 'Net Profit', Value: formatCurrencyForExport(stats?.netProfit ?? 0) },
+      { Section: 'Finance', Metric: 'Paid Invoices', Value: String(paidInvoicesCount) },
+      { Section: 'Finance', Metric: 'Outstanding Invoices', Value: String(reportTemplateData.outstandingInvoiceCount) },
+      { Section: 'Finance', Metric: 'Outstanding Amount', Value: formatCurrencyForExport((stats?.pendingAmount ?? 0) + (stats?.overdueAmount ?? 0)) },
+      { Section: 'Inventory', Metric: 'Total Inventory Value', Value: formatCurrencyForExport(reportTemplateData.inventoryStats?.totalValue ?? 0) },
+      { Section: 'Inventory', Metric: 'Low Stock Items', Value: String(reportTemplateData.inventoryStats?.lowStockItems ?? 0) },
+      { Section: 'Inventory', Metric: 'Out of Stock Items', Value: String(reportTemplateData.inventoryStats?.outOfStockItems ?? 0) },
+      { Section: 'Exhibitions', Metric: 'Total Exhibitions', Value: String(reportTemplateData.exhibitionTotals.totalExhibitions) },
+      { Section: 'Exhibitions', Metric: 'Total Leads', Value: String(reportTemplateData.exhibitionTotals.totalLeads) },
+      { Section: 'Exhibitions', Metric: 'Conversion Rate', Value: `${reportTemplateData.exhibitionTotals.conversionRate.toFixed(2)}%` },
+      { Section: 'Exhibitions', Metric: 'Revenue', Value: formatCurrencyForExport(reportTemplateData.exhibitionTotals.totalRevenue) },
+    ];
+
+    reportTemplateData.topRevenueSections.slice(0, 5).forEach((row, index) => {
+      templateRows.push({
+        Section: 'Revenue Sources',
+        Metric: `Top Source ${index + 1}: ${row.section}`,
+        Value: formatCurrencyForExport(row.value),
+      });
+    });
+
+    reportTemplateData.soldStockSummary.slice(0, 5).forEach((row, index) => {
+      templateRows.push({
+        Section: 'Top Sold Items',
+        Metric: `${index + 1}. ${row.itemName} (${row.soldUnits} units)`,
+        Value: formatCurrencyForExport(row.estimatedRevenue),
+      });
+    });
+
+    const chartRefs: Array<{ ref: HTMLElement; title: string }> = [];
+    if (incomeExpenseChartRef.current) {
+      chartRefs.push({ ref: incomeExpenseChartRef.current, title: 'Revenue vs Expense Snapshot' });
+    }
+    if (cashFlowChartRef.current) {
+      chartRefs.push({ ref: cashFlowChartRef.current, title: 'Cash Flow Snapshot' });
+    }
+    if (invoiceStatusChartRef.current) {
+      chartRefs.push({ ref: invoiceStatusChartRef.current, title: 'Invoice Status Snapshot' });
+    }
+
+    await exportToPDF({
+      filename: `business-template-report-${formatDateForExport(new Date())}`,
+      title: 'Business Performance Template Report',
+      subtitle: `Generated on ${reportTemplateData.generatedOn}`,
+      data: templateRows,
+      headers: ['Section', 'Metric', 'Value'],
+      chartRefs,
+    });
+
+    toast.success('Exported business template report as PDF');
   };
 
   if (loading) {
@@ -1074,18 +1329,187 @@ const FinancePage: React.FC = () => {
       {activeTab === 'reports' && (
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Financial Reports" subtitle="Download financial reports in multiple formats" />
+            <CardHeader title="Business Template Report" subtitle="Detailed sales, finance, customer, inventory, and exhibition report with fixed format" />
             <CardContent className="p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="bg-slate-900 px-6 py-5 text-white">
+                  <h3 className="text-2xl font-semibold">Organization Executive Sales & Operations Report</h3>
+                  <p className="text-sm text-slate-300 mt-1">Generated on {reportTemplateData.generatedOn}</p>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Executive Summary</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="rounded-xl bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Customers</p>
+                        <p className="mt-2 text-xl font-bold text-slate-900">{reportTemplateData.customerStats?.totalCustomers ?? 0}</p>
+                        <p className="text-sm text-slate-600">Active: {reportTemplateData.customerStats?.activeCustomers ?? 0}</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Finance</p>
+                        <p className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(stats?.totalRevenue ?? 0)}</p>
+                        <p className="text-sm text-slate-600">Net: {formatCurrency(stats?.netProfit ?? 0)}</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Inventory Value</p>
+                        <p className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(reportTemplateData.inventoryStats?.totalValue ?? 0)}</p>
+                        <p className="text-sm text-slate-600">Items: {reportTemplateData.inventoryStats?.totalItems ?? 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Revenue By Section</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700">
+                            <th className="text-left px-4 py-2">Section</th>
+                            <th className="text-left px-4 py-2">Revenue</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportTemplateData.topRevenueSections.length === 0 ? (
+                            <tr>
+                              <td className="px-4 py-3 text-slate-500" colSpan={2}>No revenue data available yet</td>
+                            </tr>
+                          ) : (
+                            reportTemplateData.topRevenueSections.map((row) => (
+                              <tr key={row.section} className="border-b border-slate-100">
+                                <td className="px-4 py-3">{row.section}</td>
+                                <td className="px-4 py-3 font-medium">{formatCurrency(row.value)}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-900 mb-3">Top Sold Stock</h4>
+                      <div className="overflow-x-auto border border-slate-100 rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700">
+                              <th className="text-left px-3 py-2">Item</th>
+                              <th className="text-left px-3 py-2">Units Sold</th>
+                              <th className="text-left px-3 py-2">Est. Revenue</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportTemplateData.soldStockSummary.length === 0 ? (
+                              <tr>
+                                <td className="px-3 py-3 text-slate-500" colSpan={3}>No sold stock data available</td>
+                              </tr>
+                            ) : (
+                              reportTemplateData.soldStockSummary.slice(0, 6).map((row) => (
+                                <tr key={row.itemId} className="border-b border-slate-100">
+                                  <td className="px-3 py-2">{row.itemName}</td>
+                                  <td className="px-3 py-2">{row.soldUnits}</td>
+                                  <td className="px-3 py-2">{formatCurrency(row.estimatedRevenue)}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-900 mb-3">High Value Inventory</h4>
+                      <div className="overflow-x-auto border border-slate-100 rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700">
+                              <th className="text-left px-3 py-2">Item</th>
+                              <th className="text-left px-3 py-2">Stock</th>
+                              <th className="text-left px-3 py-2">Stock Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportTemplateData.topInventoryItems.length === 0 ? (
+                              <tr>
+                                <td className="px-3 py-3 text-slate-500" colSpan={3}>No inventory data available</td>
+                              </tr>
+                            ) : (
+                              reportTemplateData.topInventoryItems.slice(0, 6).map((row) => (
+                                <tr key={row.id} className="border-b border-slate-100">
+                                  <td className="px-3 py-2">{row.name}</td>
+                                  <td className="px-3 py-2">{row.currentStock} {row.unit}</td>
+                                  <td className="px-3 py-2">{formatCurrency(row.currentStock * row.sellingPrice)}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <div className="text-emerald-800 font-medium">Outstanding Invoices</div>
+                      <div className="text-emerald-900 mt-1 text-lg font-semibold">{reportTemplateData.outstandingInvoiceCount}</div>
+                    </div>
+                    <div>
+                      <div className="text-emerald-800 font-medium">Exhibitions</div>
+                      <div className="text-emerald-900 mt-1 text-lg font-semibold">{reportTemplateData.exhibitionTotals.totalExhibitions}</div>
+                    </div>
+                    <div>
+                      <div className="text-emerald-800 font-medium">Leads Captured</div>
+                      <div className="text-emerald-900 mt-1 text-lg font-semibold">{reportTemplateData.exhibitionTotals.totalLeads}</div>
+                    </div>
+                    <div>
+                      <div className="text-emerald-800 font-medium">Conversion Rate</div>
+                      <div className="text-emerald-900 mt-1 text-lg font-semibold">{reportTemplateData.exhibitionTotals.conversionRate.toFixed(2)}%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2 justify-end">
+                <Button variant="secondary" onClick={exportTemplateReportToExcel}>
+                  <FiDownload className="w-4 h-4 mr-2" /> Export Template Excel
+                </Button>
+                <Button variant="primary" onClick={exportTemplateReportToPDF}>
+                  <FiDownload className="w-4 h-4 mr-2" /> Export Template PDF
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader title="Financial Reports" subtitle="Download clean export-ready reports in multiple formats" />
+            <CardContent className="p-6">
+              <div className="mb-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-5 text-white shadow-lg">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.2em] text-slate-300">Report center</p>
+                    <h3 className="mt-2 text-xl font-semibold">Export summary, trends, and invoice snapshots</h3>
+                    <p className="mt-1 text-sm text-slate-300">Each export is formatted for quick sharing with finance and leadership.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <span className="rounded-full bg-white/10 px-3 py-1">CSV</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1">Excel</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1">PDF</span>
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="p-6 border border-gray-200 rounded-lg">
-                  <FiFileText className="w-8 h-8 text-primary mb-3" />
+                <div className="rounded-2xl border border-primary-100 bg-gradient-to-b from-white to-primary-50/40 p-6 shadow-sm transition-shadow hover:shadow-md">
+                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-100 text-primary">
+                    <FiFileText className="w-6 h-6" />
+                  </div>
                   <h3 className="font-semibold text-gray-900 mb-2">Profit & Loss Statement</h3>
                   <p className="text-sm text-gray-600 mb-4">Calculated from finance ledger data</p>
                   <div className="space-y-2">
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => downloadReport('profit-loss')}>
+                    <Button variant="primary" size="sm" className="w-full" onClick={() => downloadReport('profit-loss')}>
                       <FiDownload className="w-4 h-4 mr-2" /> CSV
                     </Button>
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToExcel('profit-loss')}>
+                    <Button variant="secondary" size="sm" className="w-full" onClick={() => exportReportToExcel('profit-loss')}>
                       <FiDownload className="w-4 h-4 mr-2" /> Excel
                     </Button>
                     <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToPDF('profit-loss')}>
@@ -1093,15 +1517,17 @@ const FinancePage: React.FC = () => {
                     </Button>
                   </div>
                 </div>
-                <div className="p-6 border border-gray-200 rounded-lg">
-                  <FiBarChart2 className="w-8 h-8 text-primary mb-3" />
+                <div className="rounded-2xl border border-info-100 bg-gradient-to-b from-white to-info-50/40 p-6 shadow-sm transition-shadow hover:shadow-md">
+                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-info-100 text-info-700">
+                    <FiBarChart2 className="w-6 h-6" />
+                  </div>
                   <h3 className="font-semibold text-gray-900 mb-2">Cash Flow Report</h3>
                   <p className="text-sm text-gray-600 mb-4">Trend view from monthly income/expense</p>
                   <div className="space-y-2">
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => downloadReport('cash-flow')}>
+                    <Button variant="primary" size="sm" className="w-full" onClick={() => downloadReport('cash-flow')}>
                       <FiDownload className="w-4 h-4 mr-2" /> CSV
                     </Button>
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToExcel('cash-flow')}>
+                    <Button variant="secondary" size="sm" className="w-full" onClick={() => exportReportToExcel('cash-flow')}>
                       <FiDownload className="w-4 h-4 mr-2" /> Excel
                     </Button>
                     <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToPDF('cash-flow')}>
@@ -1109,15 +1535,17 @@ const FinancePage: React.FC = () => {
                     </Button>
                   </div>
                 </div>
-                <div className="p-6 border border-gray-200 rounded-lg">
-                  <FiDollarSign className="w-8 h-8 text-primary mb-3" />
+                <div className="rounded-2xl border border-warning-100 bg-gradient-to-b from-white to-warning-50/40 p-6 shadow-sm transition-shadow hover:shadow-md">
+                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-warning-100 text-warning-700">
+                    <FiDollarSign className="w-6 h-6" />
+                  </div>
                   <h3 className="font-semibold text-gray-900 mb-2">Outstanding Invoices</h3>
                   <p className="text-sm text-gray-600 mb-4">Pending and overdue totals from live invoices</p>
                   <div className="space-y-2">
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => downloadReport('outstanding')}>
+                    <Button variant="primary" size="sm" className="w-full" onClick={() => downloadReport('outstanding')}>
                       <FiDownload className="w-4 h-4 mr-2" /> CSV
                     </Button>
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToExcel('outstanding')}>
+                    <Button variant="secondary" size="sm" className="w-full" onClick={() => exportReportToExcel('outstanding')}>
                       <FiDownload className="w-4 h-4 mr-2" /> Excel
                     </Button>
                     <Button variant="outline" size="sm" className="w-full" onClick={() => exportReportToPDF('outstanding')}>
