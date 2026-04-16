@@ -25,7 +25,7 @@ import {
   LedgerEntry,
   LedgerEntryType,
 } from '../../../services/api/financeService';
-import { formatCurrency, formatDate } from '../../../utils/helpers';
+import { downloadFile, formatCurrency, formatDate } from '../../../utils/helpers';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
@@ -43,6 +43,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { toast } from 'sonner';
 
 type CashFlowData = {
   month: string;
@@ -80,6 +81,14 @@ const toMonthLabel = (period: string) => {
   const month = Number(parts[1]);
   if (!Number.isFinite(year) || !Number.isFinite(month)) return period;
   return new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'short' });
+};
+
+const csvEscape = (value: string | number | null | undefined) => {
+  const text = String(value ?? '');
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
 };
 
 const FinancePage: React.FC = () => {
@@ -259,6 +268,75 @@ const FinancePage: React.FC = () => {
     }
   };
 
+  const downloadCsv = (filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>) => {
+    const csv = [
+      headers.join(','),
+      ...rows.map((row) => row.map(csvEscape).join(',')),
+    ].join('\n');
+
+    downloadFile(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+  };
+
+  const downloadInvoiceCsv = (invoice: FinanceInvoice) => {
+    downloadCsv(
+      `invoice-${invoice.invoiceNumber}.csv`,
+      ['Invoice Number', 'Status', 'Issue Date', 'Due Date', 'Currency', 'Subtotal', 'Tax', 'Discount', 'Total', 'Paid At', 'Notes'],
+      [[
+        invoice.invoiceNumber,
+        invoice.status,
+        invoice.issueDate,
+        invoice.dueDate ?? '',
+        invoice.currency,
+        invoice.subtotal,
+        invoice.taxAmount,
+        invoice.discountAmount,
+        invoice.totalAmount,
+        invoice.paidAt ?? '',
+        invoice.notes ?? '',
+      ]],
+    );
+    toast.success(`Downloaded ${invoice.invoiceNumber}`);
+  };
+
+  const downloadReport = (type: 'profit-loss' | 'cash-flow' | 'outstanding') => {
+    const now = new Date().toISOString();
+
+    if (type === 'profit-loss') {
+      downloadCsv(
+        `profit-loss-${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Generated At', 'Total Revenue', 'Total Expenses', 'Net Profit', 'Profit Margin %'],
+        [[
+          now,
+          stats?.totalRevenue ?? 0,
+          stats?.totalExpenses ?? 0,
+          stats?.netProfit ?? 0,
+          stats && stats.totalRevenue > 0 ? ((stats.netProfit / stats.totalRevenue) * 100).toFixed(2) : '0.00',
+        ]],
+      );
+      toast.success('Downloaded Profit & Loss report');
+      return;
+    }
+
+    if (type === 'cash-flow') {
+      downloadCsv(
+        `cash-flow-${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Period', 'Income', 'Expense', 'Net'],
+        cashFlowData.map((row) => [row.month, row.income, row.expense, row.net]),
+      );
+      toast.success('Downloaded Cash Flow report');
+      return;
+    }
+
+    downloadCsv(
+      `outstanding-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Invoice Number', 'Status', 'Issue Date', 'Due Date', 'Total Amount'],
+      invoices
+        .filter((invoice) => invoice.status === 'PENDING' || invoice.status === 'OVERDUE')
+        .map((invoice) => [invoice.invoiceNumber, invoice.status, invoice.issueDate, invoice.dueDate ?? '', invoice.totalAmount]),
+    );
+    toast.success('Downloaded Outstanding Invoices report');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -291,7 +369,7 @@ const FinancePage: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => downloadInvoiceCsv(selectedInvoice)}>
               <FiDownload className="w-4 h-4 mr-2" />
               Download
             </Button>
@@ -640,6 +718,10 @@ const FinancePage: React.FC = () => {
 
       {activeTab === 'invoices' && (
         <>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Invoice Section</h2>
+            <p className="text-sm text-gray-600">Manage invoice lifecycle and export individual invoice copies.</p>
+          </div>
           <div className="flex gap-2">
             <Button variant={filterStatus === 'all' ? 'primary' : 'outline'} size="sm" onClick={() => setFilterStatus('all')}>
               All ({invoices.length})
@@ -779,7 +861,7 @@ const FinancePage: React.FC = () => {
                 <FiFileText className="w-8 h-8 text-primary mb-3" />
                 <h3 className="font-semibold text-gray-900 mb-2">Profit & Loss Statement</h3>
                 <p className="text-sm text-gray-600 mb-4">Calculated from finance ledger data</p>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => downloadReport('profit-loss')}>
                   <FiDownload className="w-4 h-4 mr-2" />
                   Download
                 </Button>
@@ -788,7 +870,7 @@ const FinancePage: React.FC = () => {
                 <FiBarChart2 className="w-8 h-8 text-primary mb-3" />
                 <h3 className="font-semibold text-gray-900 mb-2">Cash Flow Report</h3>
                 <p className="text-sm text-gray-600 mb-4">Trend view from monthly income/expense</p>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => downloadReport('cash-flow')}>
                   <FiDownload className="w-4 h-4 mr-2" />
                   Download
                 </Button>
@@ -797,7 +879,7 @@ const FinancePage: React.FC = () => {
                 <FiDollarSign className="w-8 h-8 text-primary mb-3" />
                 <h3 className="font-semibold text-gray-900 mb-2">Outstanding Invoices</h3>
                 <p className="text-sm text-gray-600 mb-4">Pending and overdue totals from live invoices</p>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => downloadReport('outstanding')}>
                   <FiDownload className="w-4 h-4 mr-2" />
                   Download
                 </Button>

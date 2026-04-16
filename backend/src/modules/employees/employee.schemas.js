@@ -58,3 +58,21 @@ export const employeeListQuerySchema = z.object({
 export const employeeStatusSchema = z.object({
   isActive: z.boolean(),
 });
+
+export const moduleKeySchema = z.enum([
+  'CUSTOMER_MANAGEMENT',
+  'INVENTORY_MANAGEMENT',
+  'FINANCE_MANAGEMENT',
+  'TASK_MANAGEMENT',
+  'EXHIBITION_MANAGEMENT',
+  'ANALYTICS_MANAGEMENT',
+]);
+
+export const employeeModuleAccessPolicySchema = z.object({
+  allowed: z.boolean(),
+  limits: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])).optional(),
+});
+
+export const employeeModuleAccessUpdateSchema = z.object({
+  moduleAccessPolicies: z.record(moduleKeySchema, employeeModuleAccessPolicySchema),
+});

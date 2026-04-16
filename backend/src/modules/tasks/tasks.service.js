@@ -9,6 +9,21 @@ const TASK_STATUS = {
   CANCELLED: 'CANCELLED',
 };
 
+const STAFF = 'STAFF';
+
+const staffTaskWhere = (accessContext = {}, scope = 'MY') => {
+  if (accessContext.role !== STAFF || !accessContext.userId) return {};
+  if (scope === 'GLOBAL') return {};
+  return { assignedTo: accessContext.userId };
+};
+
+const ensureStaffTaskAccess = (task, accessContext = {}) => {
+  if (accessContext.role !== STAFF) return;
+  if (!task || task.assignedTo !== accessContext.userId) {
+    throw new HttpError(403, 'You can only access tasks assigned to you', 'TASK_FORBIDDEN');
+  }
+};
+
 const fullName = (user) => {
   if (!user) return undefined;
   return [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
@@ -53,9 +68,10 @@ const taskInclude = {
 };
 
 export const taskService = {
-  async list(organizationId, page, pageSize, query) {
+  async list(organizationId, page, pageSize, query, accessContext = {}) {
     const where = {
       organizationId,
+      ...staffTaskWhere(accessContext, query.scope),
       ...(query.search
         ? {
             OR: [
@@ -66,7 +82,7 @@ export const taskService = {
         : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
-      ...(query.assignedTo ? { assignedTo: query.assignedTo } : {}),
+      ...(query.assignedTo && accessContext.role !== STAFF ? { assignedTo: query.assignedTo } : {}),
     };
 
     const [total, items] = await Promise.all([
@@ -86,16 +102,22 @@ export const taskService = {
     };
   },
 
-  async stats(organizationId) {
+  async stats(organizationId, accessContext = {}) {
+    const scope = accessContext.scope || 'GLOBAL';
+    const scopedWhere = {
+      organizationId,
+      ...staffTaskWhere(accessContext, scope),
+    };
+
     const [total, todo, inProgress, review, completed, overdue] = await Promise.all([
-      prisma.task.count({ where: { organizationId } }),
-      prisma.task.count({ where: { organizationId, status: TASK_STATUS.TODO } }),
-      prisma.task.count({ where: { organizationId, status: TASK_STATUS.IN_PROGRESS } }),
-      prisma.task.count({ where: { organizationId, status: TASK_STATUS.REVIEW } }),
-      prisma.task.count({ where: { organizationId, status: TASK_STATUS.COMPLETED } }),
+      prisma.task.count({ where: scopedWhere }),
+      prisma.task.count({ where: { ...scopedWhere, status: TASK_STATUS.TODO } }),
+      prisma.task.count({ where: { ...scopedWhere, status: TASK_STATUS.IN_PROGRESS } }),
+      prisma.task.count({ where: { ...scopedWhere, status: TASK_STATUS.REVIEW } }),
+      prisma.task.count({ where: { ...scopedWhere, status: TASK_STATUS.COMPLETED } }),
       prisma.task.count({
         where: {
-          organizationId,
+          ...scopedWhere,
           dueDate: { lt: new Date() },
           status: { notIn: [TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED] },
         },
@@ -112,9 +134,9 @@ export const taskService = {
     };
   },
 
-  async getById(organizationId, id) {
+  async getById(organizationId, id, accessContext = {}) {
     const task = await prisma.task.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, ...staffTaskWhere(accessContext) },
       include: {
         ...taskInclude,
         comments: {
@@ -195,11 +217,13 @@ export const taskService = {
     return mapTask(task);
   },
 
-  async updateStatus(organizationId, id, status) {
+  async updateStatus(organizationId, id, status, accessContext = {}) {
     const existing = await prisma.task.findFirst({ where: { id, organizationId } });
     if (!existing) {
       throw new HttpError(404, 'Task not found', 'TASK_NOT_FOUND');
     }
+
+    ensureStaffTaskAccess(existing, accessContext);
 
     const task = await prisma.task.update({
       where: { id: existing.id },
@@ -222,11 +246,13 @@ export const taskService = {
     await prisma.task.delete({ where: { id: existing.id } });
   },
 
-  async listComments(organizationId, taskId) {
+  async listComments(organizationId, taskId, accessContext = {}) {
     const task = await prisma.task.findFirst({ where: { id: taskId, organizationId } });
     if (!task) {
       throw new HttpError(404, 'Task not found', 'TASK_NOT_FOUND');
     }
+
+    ensureStaffTaskAccess(task, accessContext);
 
     const comments = await prisma.taskComment.findMany({
       where: { taskId },
@@ -248,11 +274,13 @@ export const taskService = {
     }));
   },
 
-  async addComment(organizationId, taskId, userId, content) {
+  async addComment(organizationId, taskId, userId, content, accessContext = {}) {
     const task = await prisma.task.findFirst({ where: { id: taskId, organizationId } });
     if (!task) {
       throw new HttpError(404, 'Task not found', 'TASK_NOT_FOUND');
     }
+
+    ensureStaffTaskAccess(task, accessContext);
 
     const comment = await prisma.taskComment.create({
       data: {

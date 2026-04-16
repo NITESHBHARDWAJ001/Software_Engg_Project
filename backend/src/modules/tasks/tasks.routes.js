@@ -29,7 +29,10 @@ taskRouter.get('/', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) 
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 
   const query = taskListQuerySchema.parse(req.query);
-  const { items, total } = await taskService.list(orgId, query.page, query.pageSize, query);
+  const { items, total } = await taskService.list(orgId, query.page, query.pageSize, query, {
+    role: req.auth.role,
+    userId: req.auth.userId,
+  });
   res.json(paged(items, query.page, query.pageSize, total));
 });
 
@@ -37,7 +40,13 @@ taskRouter.get('/stats', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, 
   const orgId = getOrganizationScope(req);
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 
-  const stats = await taskService.stats(orgId);
+  const query = taskListQuerySchema.parse(req.query);
+
+  const stats = await taskService.stats(orgId, {
+    role: req.auth.role,
+    userId: req.auth.userId,
+    scope: query.scope,
+  });
   res.json(ok(stats));
 });
 
@@ -46,7 +55,10 @@ taskRouter.get('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, re
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const task = await taskService.getById(orgId, id);
+  const task = await taskService.getById(orgId, id, {
+    role: req.auth.role,
+    userId: req.auth.userId,
+  });
   res.json(ok(task));
 });
 
@@ -75,7 +87,10 @@ taskRouter.patch('/:id/status', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async
 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const payload = taskStatusUpdateSchema.parse(req.body);
-  const task = await taskService.updateStatus(orgId, id, payload.status);
+  const task = await taskService.updateStatus(orgId, id, payload.status, {
+    role: req.auth.role,
+    userId: req.auth.userId,
+  });
   res.json(ok(task, 'Task status updated'));
 });
 
@@ -93,7 +108,10 @@ taskRouter.get('/:id/comments', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const comments = await taskService.listComments(orgId, id);
+  const comments = await taskService.listComments(orgId, id, {
+    role: req.auth.role,
+    userId: req.auth.userId,
+  });
   res.json(ok(comments));
 });
 
@@ -103,6 +121,9 @@ taskRouter.post('/:id/comments', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), asyn
 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const payload = taskCommentCreateSchema.parse(req.body);
-  const comment = await taskService.addComment(orgId, id, req.auth.userId, payload.content);
+  const comment = await taskService.addComment(orgId, id, req.auth.userId, payload.content, {
+    role: req.auth.role,
+    userId: req.auth.userId,
+  });
   res.status(201).json(ok(comment, 'Comment added'));
 });

@@ -23,7 +23,9 @@ import { EmptyState } from '../../../components/ui/EmptyState';
 import { Input } from '../../../components/ui/Input';
 import { useOrganizationStore } from '../../../store/organizationStore';
 import { Task, TaskStatus, TaskPriority } from '../../../types';
-import { taskService } from '../../../services/api/taskService';
+import { useAuthStore } from '../../../store/authStore';
+import { UserRole } from '../../../types';
+import { taskService, type TaskBoardScope } from '../../../services/api/taskService';
 import { formatDate, getRelativeTime } from '../../../utils/helpers';
 import { employeeService, type Employee } from '../../../services/api/employeeService';
 import { toast } from 'sonner';
@@ -63,6 +65,7 @@ const toDateKey = (value: string | Date) => {
 
 export default function TasksPage() {
   const { currentOrganization } = useOrganizationStore();
+  const { user } = useAuthStore();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,12 +75,21 @@ export default function TasksPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [createTaskForm, setCreateTaskForm] = useState<CreateTaskForm>(initialCreateTaskForm);
   const [activeCalendarDate, setActiveCalendarDate] = useState<string>('');
+  const [boardScope, setBoardScope] = useState<TaskBoardScope>('GLOBAL');
+
+  const isStaffUser = user?.role === UserRole.STAFF;
+
+  useEffect(() => {
+    if (isStaffUser) {
+      setBoardScope('MY');
+    }
+  }, [isStaffUser]);
 
   useEffect(() => {
     if (currentOrganization) {
       loadTasks();
     }
-  }, [currentOrganization]);
+  }, [currentOrganization, user?.id, user?.role, boardScope]);
 
   const loadTasks = async () => {
     if (!currentOrganization) return;
@@ -85,7 +97,9 @@ export default function TasksPage() {
     setLoading(true);
     try {
       const [data, employeeData] = await Promise.all([
-        taskService.getAllTasks(currentOrganization.id),
+        boardScope === 'MY' && user?.id
+          ? taskService.getTasksByUser(user.id)
+          : taskService.getAllTasks(currentOrganization.id, boardScope),
         employeeService.getEmployees().catch(() => []),
       ]);
       setTasks(data);
@@ -200,10 +214,10 @@ export default function TasksPage() {
     : tasks.filter(task => task.status === selectedStatus);
 
   const tasksByStatus = {
-    [TaskStatus.TODO]: tasks.filter(t => t.status === TaskStatus.TODO),
-    [TaskStatus.IN_PROGRESS]: tasks.filter(t => t.status === TaskStatus.IN_PROGRESS),
-    [TaskStatus.REVIEW]: tasks.filter(t => t.status === TaskStatus.REVIEW),
-    [TaskStatus.COMPLETED]: tasks.filter(t => t.status === TaskStatus.COMPLETED),
+    [TaskStatus.TODO]: filteredTasks.filter(t => t.status === TaskStatus.TODO),
+    [TaskStatus.IN_PROGRESS]: filteredTasks.filter(t => t.status === TaskStatus.IN_PROGRESS),
+    [TaskStatus.REVIEW]: filteredTasks.filter(t => t.status === TaskStatus.REVIEW),
+    [TaskStatus.COMPLETED]: filteredTasks.filter(t => t.status === TaskStatus.COMPLETED),
   };
 
   const tasksWithDueDate = tasks.filter((task) => Boolean(task.dueDate));
@@ -241,6 +255,20 @@ export default function TasksPage() {
     completed: tasksByStatus[TaskStatus.COMPLETED].length,
   };
 
+  const myTasks = user?.id
+    ? tasks.filter((task) => task.assignedTo === user.id)
+    : [];
+  const newlyAssignedTasks = myTasks.filter((task) => {
+    const createdAt = new Date(task.createdAt).getTime();
+    return Number.isFinite(createdAt) && Date.now() - createdAt <= 24 * 60 * 60 * 1000;
+  });
+  const overdueMyTasks = myTasks.filter(
+    (task) => task.dueDate && new Date(task.dueDate) < new Date() && task.status !== TaskStatus.COMPLETED
+  );
+  const dueTodayMyTasks = myTasks.filter(
+    (task) => task.dueDate && toDateKey(task.dueDate) === todayKey && task.status !== TaskStatus.COMPLETED
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -255,13 +283,65 @@ export default function TasksPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Task Management</h1>
-          <p className="text-gray-600 mt-1">Manage and track your team's tasks</p>
+          <p className="text-gray-600 mt-1">
+            {isStaffUser ? 'View and update tasks assigned to you' : "Manage and track your team's tasks"}
+          </p>
         </div>
-        <Button onClick={() => setShowCreateTask(true)}>
-          <FiPlus className="w-4 h-4" />
-          New Task
-        </Button>
+        {!isStaffUser && (
+          <Button onClick={() => setShowCreateTask(true)}>
+            <FiPlus className="w-4 h-4" />
+            New Task
+          </Button>
+        )}
       </div>
+
+      <Card>
+        <CardBody>
+          <div className="flex flex-wrap gap-2 items-center justify-between">
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={boardScope === 'MY' ? 'primary' : 'outline'}
+                onClick={() => setBoardScope('MY')}
+              >
+                My Allotted Tasks
+              </Button>
+              <Button
+                size="sm"
+                variant={boardScope === 'GLOBAL' ? 'primary' : 'outline'}
+                onClick={() => setBoardScope('GLOBAL')}
+              >
+                Global Task Board
+              </Button>
+            </div>
+            <div className="text-sm text-gray-600">
+              Active board: {boardScope === 'MY' ? 'My Allotted Tasks' : 'Global Task Board'}
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {boardScope === 'MY' && (
+        <Card>
+          <CardHeader title="Task Allocation Notifications" subtitle="Updates from your allotted tasks" />
+          <CardBody>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                <p className="text-sm text-gray-600">Newly assigned (24h)</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-1">{newlyAssignedTasks.length}</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm text-amber-800">Due today</p>
+                <p className="text-2xl font-semibold text-amber-900 mt-1">{dueTodayMyTasks.length}</p>
+              </div>
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm text-red-700">Overdue</p>
+                <p className="text-2xl font-semibold text-red-900 mt-1">{overdueMyTasks.length}</p>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {showCreateTask && (
         <Card>
@@ -498,6 +578,22 @@ export default function TasksPage() {
                                 </span>
                               </div>
                             )}
+                            {isStaffUser && boardScope === 'MY' && task.assignedTo === user?.id && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500">Update:</span>
+                                <select
+                                  className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-800"
+                                  value={task.status}
+                                  onChange={(e) => moveTaskStatus(task, e.target.value as TaskStatus)}
+                                >
+                                  {Object.values(TaskStatus).map((status) => (
+                                    <option key={status} value={status}>
+                                      {status.replace('_', ' ')}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                             {task.tags && task.tags.length > 0 && (
                               <div className="flex gap-2">
                                 {task.tags.map((tag, index) => (
@@ -512,14 +608,16 @@ export default function TasksPage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button variant="ghost" size="sm">
-                            <FiEdit className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <FiTrash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        {!isStaffUser && (
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm">
+                              <FiEdit className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm">
+                              <FiTrash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -571,7 +669,10 @@ export default function TasksPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            disabled={statusIndexMap[task.status] <= 0}
+                            disabled={
+                              statusIndexMap[task.status] <= 0 ||
+                              (isStaffUser && task.assignedTo !== user?.id)
+                            }
                             onClick={() => {
                               const currentIndex = statusIndexMap[task.status];
                               const target = kanbanStatusOrder[Math.max(0, currentIndex - 1)];
@@ -583,7 +684,10 @@ export default function TasksPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            disabled={statusIndexMap[task.status] >= kanbanStatusOrder.length - 1}
+                            disabled={
+                              statusIndexMap[task.status] >= kanbanStatusOrder.length - 1 ||
+                              (isStaffUser && task.assignedTo !== user?.id)
+                            }
                             onClick={() => {
                               const currentIndex = statusIndexMap[task.status];
                               const target = kanbanStatusOrder[Math.min(kanbanStatusOrder.length - 1, currentIndex + 1)];

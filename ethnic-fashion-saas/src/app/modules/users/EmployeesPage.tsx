@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { FiBriefcase, FiCalendar, FiLock, FiMail, FiPhone, FiPlus, FiUser } from 'react-icons/fi';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/Button';
@@ -9,6 +9,8 @@ import {
   employeeService,
   type CreateEmployeePayload,
   type Employee,
+  type EmployeeModuleAccess,
+  type EmployeeModuleKey,
   type EmploymentType,
 } from '../../../services/api/employeeService';
 import { useAuthStore } from '../../../store/authStore';
@@ -37,6 +39,15 @@ const employmentTypeOptions: EmploymentType[] = [
   'TEMPORARY',
 ];
 
+const moduleOptions: Array<{ key: EmployeeModuleKey; label: string }> = [
+  { key: 'CUSTOMER_MANAGEMENT', label: 'Customer Management' },
+  { key: 'INVENTORY_MANAGEMENT', label: 'Inventory Management' },
+  { key: 'FINANCE_MANAGEMENT', label: 'Finance' },
+  { key: 'TASK_MANAGEMENT', label: 'Task Management' },
+  { key: 'EXHIBITION_MANAGEMENT', label: 'Exhibition Management' },
+  { key: 'ANALYTICS_MANAGEMENT', label: 'Analytics' },
+];
+
 const labelize = (value: string) => value.replace(/_/g, ' ');
 
 const EmployeesPage = () => {
@@ -45,6 +56,10 @@ const EmployeesPage = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<CreateFormState>(initialState);
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
+  const [moduleAccessByEmployee, setModuleAccessByEmployee] = useState<Record<string, EmployeeModuleAccess['moduleAccessPolicies']>>({});
+  const [loadingModuleAccessFor, setLoadingModuleAccessFor] = useState<string | null>(null);
+  const [savingModuleAccessFor, setSavingModuleAccessFor] = useState<string | null>(null);
 
   const canCreate = user?.role === UserRole.ORG_ADMIN;
 
@@ -107,6 +122,60 @@ const EmployeesPage = () => {
       toast.success(updated.isActive ? 'Employee activated' : 'Employee deactivated');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update employee status');
+    }
+  };
+
+  const openModuleAccess = async (employeeId: string) => {
+    const shouldCollapse = expandedEmployeeId === employeeId;
+    if (shouldCollapse) {
+      setExpandedEmployeeId(null);
+      return;
+    }
+
+    setExpandedEmployeeId(employeeId);
+    if (moduleAccessByEmployee[employeeId]) return;
+
+    setLoadingModuleAccessFor(employeeId);
+    try {
+      const data = await employeeService.getEmployeeModuleAccess(employeeId);
+      setModuleAccessByEmployee((prev) => ({ ...prev, [employeeId]: data.moduleAccessPolicies }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load module access');
+    } finally {
+      setLoadingModuleAccessFor(null);
+    }
+  };
+
+  const toggleModule = (employeeId: string, moduleKey: EmployeeModuleKey) => {
+    setModuleAccessByEmployee((prev) => {
+      const current = prev[employeeId] || {};
+      const existing = current[moduleKey] || { allowed: true };
+      return {
+        ...prev,
+        [employeeId]: {
+          ...current,
+          [moduleKey]: {
+            ...existing,
+            allowed: !existing.allowed,
+          },
+        },
+      };
+    });
+  };
+
+  const saveModuleAccess = async (employeeId: string) => {
+    const payload = moduleAccessByEmployee[employeeId];
+    if (!payload) return;
+
+    setSavingModuleAccessFor(employeeId);
+    try {
+      const updated = await employeeService.updateEmployeeModuleAccess(employeeId, payload);
+      setModuleAccessByEmployee((prev) => ({ ...prev, [employeeId]: updated.moduleAccessPolicies }));
+      toast.success('Module access updated successfully');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update module access');
+    } finally {
+      setSavingModuleAccessFor(null);
     }
   };
 
@@ -224,7 +293,8 @@ const EmployeesPage = () => {
                   </thead>
                   <tbody>
                     {employees.map((employee) => (
-                      <tr key={employee.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <Fragment key={employee.id}>
+                      <tr className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-3 px-4">
                           <div>
                             <p className="font-medium text-gray-900">
@@ -248,16 +318,69 @@ const EmployeesPage = () => {
                         </td>
                         <td className="py-3 px-4">
                           {canCreate && (
-                            <Button
-                              size="sm"
-                              variant={employee.isActive ? 'outline' : 'primary'}
-                              onClick={() => toggleEmployeeStatus(employee)}
-                            >
-                              {employee.isActive ? 'Deactivate' : 'Activate'}
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openModuleAccess(employee.id)}
+                              >
+                                Module Access
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={employee.isActive ? 'outline' : 'primary'}
+                                onClick={() => toggleEmployeeStatus(employee)}
+                              >
+                                {employee.isActive ? 'Deactivate' : 'Activate'}
+                              </Button>
+                            </div>
                           )}
                         </td>
                       </tr>
+                      {expandedEmployeeId === employee.id && (
+                        <tr className="border-b border-gray-100 bg-gray-50/60">
+                          <td colSpan={5} className="px-4 py-4">
+                            <div className="space-y-3">
+                              <div className="text-sm font-semibold text-gray-800">Employee Module Access</div>
+                              <p className="text-xs text-gray-600">
+                                By default employees have all permissions enabled. Toggle any module to restrict or restore access.
+                              </p>
+                              {loadingModuleAccessFor === employee.id ? (
+                                <div className="text-sm text-gray-500">Loading module access...</div>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                  {moduleOptions.map((module) => {
+                                    const policy = moduleAccessByEmployee[employee.id]?.[module.key] || { allowed: true };
+                                    return (
+                                      <label
+                                        key={module.key}
+                                        className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={policy.allowed}
+                                          onChange={() => toggleModule(employee.id, module.key)}
+                                        />
+                                        <span>{module.label}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <div className="flex justify-end">
+                                <Button
+                                  size="sm"
+                                  isLoading={savingModuleAccessFor === employee.id}
+                                  onClick={() => saveModuleAccess(employee.id)}
+                                >
+                                  Save Access
+                                </Button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

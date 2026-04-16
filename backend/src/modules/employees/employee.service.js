@@ -2,6 +2,17 @@ import argon2 from 'argon2';
 import { prisma } from '../../shared/db/prisma.js';
 import { HttpError } from '../../shared/http/httpError.js';
 
+const ACTIVE_STATES = ['TRIALING', 'ACTIVE', 'PAST_DUE'];
+const MODULE_ACCESS_USER_METADATA_KEY = 'moduleAccessUserPolicies';
+const SUPPORTED_MODULE_KEYS = [
+  'CUSTOMER_MANAGEMENT',
+  'INVENTORY_MANAGEMENT',
+  'FINANCE_MANAGEMENT',
+  'TASK_MANAGEMENT',
+  'EXHIBITION_MANAGEMENT',
+  'ANALYTICS_MANAGEMENT',
+];
+
 const USER_SELECT = {
   id: true,
   email: true,
@@ -29,6 +40,35 @@ const ensureWithinOrganization = async (organizationId, id) => {
   }
 
   return employee;
+};
+
+const getUserModulePoliciesFromMetadata = (metadata) => {
+  if (!metadata || typeof metadata !== 'object') return {};
+  const policies = metadata[MODULE_ACCESS_USER_METADATA_KEY];
+  if (!policies || typeof policies !== 'object') return {};
+  return policies;
+};
+
+const sanitizeModuleAccessPolicies = (policies = {}) => {
+  const result = {};
+  for (const key of SUPPORTED_MODULE_KEYS) {
+    if (!policies[key] || typeof policies[key] !== 'object') continue;
+    result[key] = {
+      allowed: policies[key].allowed !== false,
+      ...(policies[key].limits && typeof policies[key].limits === 'object'
+        ? { limits: policies[key].limits }
+        : {}),
+    };
+  }
+  return result;
+};
+
+const resolveDefaultModulePolicies = (overridePolicies = {}) => {
+  const resolved = {};
+  for (const key of SUPPORTED_MODULE_KEYS) {
+    resolved[key] = overridePolicies[key] ?? { allowed: true, limits: {} };
+  }
+  return resolved;
 };
 
 export const employeeService = {
@@ -121,5 +161,72 @@ export const employeeService = {
       data: { isActive },
       select: USER_SELECT,
     });
+  },
+
+  async getModuleAccess(organizationId, employeeId) {
+    await ensureWithinOrganization(organizationId, employeeId);
+
+    const current = await prisma.organizationSubscription.findFirst({
+      where: {
+        organizationId,
+        status: { in: ACTIVE_STATES },
+      },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, metadata: true },
+    });
+
+    const metadata = current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
+    const userPolicies = getUserModulePoliciesFromMetadata(metadata);
+    const employeePolicies = sanitizeModuleAccessPolicies(userPolicies[employeeId] || {});
+
+    return {
+      employeeId,
+      moduleAccessPolicies: resolveDefaultModulePolicies(employeePolicies),
+    };
+  },
+
+  async updateModuleAccess(organizationId, actorUserId, employeeId, moduleAccessPolicies) {
+    await ensureWithinOrganization(organizationId, employeeId);
+
+    const current = await prisma.organizationSubscription.findFirst({
+      where: {
+        organizationId,
+        status: { in: ACTIVE_STATES },
+      },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, metadata: true },
+    });
+
+    if (!current) {
+      throw new HttpError(404, 'No active subscription found for organization', 'SUBSCRIPTION_NOT_FOUND');
+    }
+
+    const existingMetadata = current.metadata && typeof current.metadata === 'object' ? current.metadata : {};
+    const userPolicies = getUserModulePoliciesFromMetadata(existingMetadata);
+    const mergedEmployeePolicies = {
+      ...(userPolicies[employeeId] && typeof userPolicies[employeeId] === 'object' ? userPolicies[employeeId] : {}),
+      ...sanitizeModuleAccessPolicies(moduleAccessPolicies),
+    };
+
+    const updatedUserPolicies = {
+      ...userPolicies,
+      [employeeId]: mergedEmployeePolicies,
+    };
+
+    await prisma.organizationSubscription.update({
+      where: { id: current.id },
+      data: {
+        metadata: {
+          ...existingMetadata,
+          [MODULE_ACCESS_USER_METADATA_KEY]: updatedUserPolicies,
+        },
+        updatedBy: actorUserId,
+      },
+    });
+
+    return {
+      employeeId,
+      moduleAccessPolicies: resolveDefaultModulePolicies(mergedEmployeePolicies),
+    };
   },
 };

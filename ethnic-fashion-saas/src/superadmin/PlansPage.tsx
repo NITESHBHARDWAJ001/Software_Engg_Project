@@ -133,18 +133,22 @@ const saveOffers = (offers: OfferEvent[]) => {
 
 const normalizePayload = (form: PlanForm): PlanPayload => ({
   name: form.name.trim(),
-  code: form.code.trim().toUpperCase(),
+  code: form.code
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, ''),
   description: form.description.trim() || undefined,
   billingCycle: form.billingCycle,
-  price: toNumber(form.price),
-  currency: form.currency.trim().toUpperCase(),
+  price: Math.max(0, toNumber(form.price)),
+  currency: form.currency.trim().toUpperCase().slice(0, 3),
   isActive: form.isActive,
   features: form.features,
   limits: {
-    maxUsers: toNumber(form.maxUsers),
-    maxExhibitions: toNumber(form.maxExhibitions),
-    maxCustomers: toNumber(form.maxCustomers),
-    maxInventoryItems: toNumber(form.maxInventoryItems),
+    maxUsers: Math.max(0, toNumber(form.maxUsers)),
+    maxExhibitions: Math.max(0, toNumber(form.maxExhibitions)),
+    maxCustomers: Math.max(0, toNumber(form.maxCustomers)),
+    maxInventoryItems: Math.max(0, toNumber(form.maxInventoryItems)),
   },
 });
 
@@ -296,10 +300,18 @@ const PlansPage = () => {
       toast.error('Plan name and code are required');
       return;
     }
+    if (planForm.features.length === 0) {
+      toast.error('Select at least one feature for the plan');
+      return;
+    }
 
     setSavingPlan(true);
     try {
       const payload = normalizePayload(planForm);
+      if (!payload.code) {
+        toast.error('Plan code contains only invalid characters');
+        return;
+      }
       if (editingPlanId) {
         const updated = await superAdminService.updatePlan(editingPlanId, payload);
         setPlans((prev) => prev.map((plan) => (plan.id === updated.id ? updated : plan)));

@@ -108,7 +108,7 @@ export const customerService = {
       }),
     ]);
 
-    const totalCustomers = activeCount + inactiveCount;
+    const totalCustomers = activeCount;
     const totalRevenue = totals._sum.totalSpent?.toNumber() ?? 0;
 
     return {
@@ -116,7 +116,7 @@ export const customerService = {
       activeCustomers: activeCount,
       inactiveCustomers: inactiveCount,
       totalRevenue,
-      averagePurchaseValue: totalCustomers > 0 ? totalRevenue / totalCustomers : 0,
+      averagePurchaseValue: activeCount > 0 ? totalRevenue / activeCount : 0,
       topCustomers: topCustomers.map((customer) => ({
         id: customer.id,
         name: customer.name,

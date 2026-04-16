@@ -57,6 +57,27 @@ const toNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const resolveDerivedStatus = (exhibition: Exhibition): ExhibitionStatus => {
+  if (exhibition.status === ExhibitionStatus.CANCELLED) {
+    return ExhibitionStatus.CANCELLED;
+  }
+
+  const now = new Date();
+  const start = new Date(exhibition.startDate);
+  const end = new Date(exhibition.endDate);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return exhibition.status;
+  }
+  if (now < start) {
+    return ExhibitionStatus.UPCOMING;
+  }
+  if (now > end) {
+    return ExhibitionStatus.COMPLETED;
+  }
+  return ExhibitionStatus.ACTIVE;
+};
+
 export default function ExhibitionsPage() {
   const [exhibitions, setExhibitions] = useState<Exhibition[]>([]);
   const [selectedExhibition, setSelectedExhibition] = useState<Exhibition | null>(null);
@@ -99,16 +120,16 @@ export default function ExhibitionsPage() {
 
   const stats = useMemo(() => {
     const total = exhibitions.length;
-    const upcoming = exhibitions.filter((item) => item.status === ExhibitionStatus.UPCOMING).length;
-    const active = exhibitions.filter((item) => item.status === ExhibitionStatus.ACTIVE).length;
-    const completed = exhibitions.filter((item) => item.status === ExhibitionStatus.COMPLETED).length;
+    const upcoming = exhibitions.filter((item) => resolveDerivedStatus(item) === ExhibitionStatus.UPCOMING).length;
+    const active = exhibitions.filter((item) => resolveDerivedStatus(item) === ExhibitionStatus.ACTIVE).length;
+    const completed = exhibitions.filter((item) => resolveDerivedStatus(item) === ExhibitionStatus.COMPLETED).length;
     const totalBudget = exhibitions.reduce((sum, item) => sum + item.budget, 0);
     return { total, upcoming, active, completed, totalBudget };
   }, [exhibitions]);
 
   const filteredExhibitions = useMemo(() => {
     if (filterStatus === 'all') return exhibitions;
-    return exhibitions.filter((item) => item.status === filterStatus);
+    return exhibitions.filter((item) => resolveDerivedStatus(item) === filterStatus);
   }, [exhibitions, filterStatus]);
 
   const setExhField = (field: keyof ExhibitionForm, value: string) => {
@@ -215,6 +236,7 @@ export default function ExhibitionsPage() {
   }
 
   if (selectedExhibition) {
+    const selectedExhibitionStatus = resolveDerivedStatus(selectedExhibition);
     return (
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
@@ -233,7 +255,7 @@ export default function ExhibitionsPage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card><CardBody><div className="text-sm text-gray-600">Status</div><div className="text-xl font-bold"><Badge variant="info">{selectedExhibition.status}</Badge></div></CardBody></Card>
+          <Card><CardBody><div className="text-sm text-gray-600">Status</div><div className="text-xl font-bold"><Badge variant="info">{selectedExhibitionStatus}</Badge></div></CardBody></Card>
           <Card><CardBody><div className="text-sm text-gray-600">Budget</div><div className="text-xl font-bold">{formatCurrency(selectedExhibition.budget)}</div></CardBody></Card>
           <Card><CardBody><div className="text-sm text-gray-600">Expected Revenue</div><div className="text-xl font-bold">{formatCurrency(selectedExhibition.expectedRevenue)}</div></CardBody></Card>
           <Card><CardBody><div className="text-sm text-gray-600">Leads</div><div className="text-xl font-bold flex items-center gap-2"><FiUsers />{leads.length}</div></CardBody></Card>
@@ -375,7 +397,9 @@ export default function ExhibitionsPage() {
             <div className="text-center text-gray-500 py-8">No exhibitions available</div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredExhibitions.map((exhibition) => (
+              {filteredExhibitions.map((exhibition) => {
+                const displayStatus = resolveDerivedStatus(exhibition);
+                return (
                 <button
                   key={exhibition.id}
                   className="w-full text-left border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
@@ -387,8 +411,8 @@ export default function ExhibitionsPage() {
                       <p className="text-sm text-gray-600 mt-1 flex items-center gap-1"><FiMapPin className="w-4 h-4" />{exhibition.location}</p>
                       <p className="text-sm text-gray-500 mt-1 flex items-center gap-1"><FiCalendar className="w-4 h-4" />{formatDate(exhibition.startDate)} - {formatDate(exhibition.endDate)}</p>
                     </div>
-                    <Badge variant={exhibition.status === ExhibitionStatus.ACTIVE ? 'success' : exhibition.status === ExhibitionStatus.UPCOMING ? 'info' : exhibition.status === ExhibitionStatus.COMPLETED ? 'neutral' : 'danger'}>
-                      {exhibition.status}
+                    <Badge variant={displayStatus === ExhibitionStatus.ACTIVE ? 'success' : displayStatus === ExhibitionStatus.UPCOMING ? 'info' : displayStatus === ExhibitionStatus.COMPLETED ? 'neutral' : 'danger'}>
+                      {displayStatus}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
@@ -396,7 +420,8 @@ export default function ExhibitionsPage() {
                     <div className="text-gray-600">Leads: <span className="text-gray-900 font-medium">{exhibition.totalLeads}</span></div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardBody>
