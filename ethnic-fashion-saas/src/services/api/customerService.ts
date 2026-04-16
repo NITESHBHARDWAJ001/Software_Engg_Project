@@ -12,8 +12,31 @@ export type CustomerRecord = {
   totalSpent: number;
   lifetimeValue: number;
   isArchived: boolean;
+  rfmScore: number;
+  rfmSegment: CustomerRfmSegment;
+  rfm: CustomerRfmSnapshot;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CustomerRfmSegment =
+  | 'CHAMPION'
+  | 'LOYAL'
+  | 'POTENTIAL_LOYALIST'
+  | 'NEW_CUSTOMER'
+  | 'AT_RISK'
+  | 'NEEDS_ATTENTION';
+
+export type CustomerRfmSnapshot = {
+  recencyDays: number;
+  frequency: number;
+  monetary: number;
+  lastActivityAt: string | null;
+  recencyScore?: number;
+  frequencyScore?: number;
+  monetaryScore?: number;
+  totalScore?: number;
+  segment?: CustomerRfmSegment;
 };
 
 export type CustomerStats = {
@@ -22,11 +45,20 @@ export type CustomerStats = {
   inactiveCustomers: number;
   totalRevenue: number;
   averagePurchaseValue: number;
+  rfmSummary: {
+    customerCount: number;
+    averageRecencyDays: number;
+    averageFrequency: number;
+    averageMonetary: number;
+    segments: Record<CustomerRfmSegment, number>;
+  };
   topCustomers: Array<{
     id: string;
     name: string;
     totalSpent: number;
     lifetimeValue: number;
+    rfmScore: number;
+    rfmSegment: CustomerRfmSegment;
   }>;
 };
 
@@ -58,6 +90,9 @@ type BackendCustomer = {
   totalSpent?: string | number;
   lifetimeValue?: string | number;
   isArchived: boolean;
+  rfmScore?: number;
+  rfmSegment?: CustomerRfmSegment;
+  rfm?: CustomerRfmSnapshot;
   createdAt: string;
   updatedAt: string;
 };
@@ -82,6 +117,14 @@ const mapCustomer = (customer: BackendCustomer): CustomerRecord => ({
   totalSpent: toNumber(customer.totalSpent),
   lifetimeValue: toNumber(customer.lifetimeValue),
   isArchived: customer.isArchived,
+  rfmScore: customer.rfmScore ?? 0,
+  rfmSegment: customer.rfmSegment ?? 'NEEDS_ATTENTION',
+  rfm: customer.rfm ?? {
+    recencyDays: 0,
+    frequency: 0,
+    monetary: 0,
+    lastActivityAt: null,
+  },
   createdAt: customer.createdAt,
   updatedAt: customer.updatedAt,
 });
@@ -106,7 +149,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const customerApiService = {
-  async list(search?: string, status?: 'ACTIVE' | 'INACTIVE'): Promise<CustomerRecord[]> {
+  async list(search?: string, status?: 'ACTIVE' | 'INACTIVE' | 'ALL'): Promise<CustomerRecord[]> {
     const params = new URLSearchParams({ page: '1', pageSize: '100' });
     if (search) params.set('search', search);
     if (status) params.set('status', status);
@@ -155,5 +198,22 @@ export const customerApiService = {
 
   async archive(customerId: string): Promise<void> {
     await request<ApiSuccess<null>>(`/v1/customers/${customerId}`, { method: 'DELETE' });
+  },
+
+  async setStatus(customerId: string, isArchived: boolean): Promise<CustomerRecord> {
+    const res = await request<ApiSuccess<BackendCustomer>>(`/v1/customers/${customerId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isArchived }),
+    });
+
+    return mapCustomer(res.data);
+  },
+
+  async activate(customerId: string): Promise<CustomerRecord> {
+    return customerApiService.setStatus(customerId, false);
+  },
+
+  async deactivate(customerId: string): Promise<CustomerRecord> {
+    return customerApiService.setStatus(customerId, true);
   },
 };

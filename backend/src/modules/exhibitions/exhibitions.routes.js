@@ -51,7 +51,7 @@ exhibitionsRouter.get('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (
   res.json(ok(exhibition));
 });
 
-exhibitionsRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+exhibitionsRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 
@@ -60,7 +60,7 @@ exhibitionsRouter.post('/', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res)
   res.status(201).json(ok(exhibition, 'Exhibition created'));
 });
 
-exhibitionsRouter.patch('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+exhibitionsRouter.patch('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 

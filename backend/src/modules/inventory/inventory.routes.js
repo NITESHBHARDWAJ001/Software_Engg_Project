@@ -8,6 +8,7 @@ import {
   inventoryCreateSchema,
   inventoryListQuerySchema,
   inventoryUpdateSchema,
+  inventoryMovementQuerySchema,
   stockAdjustmentSchema,
 } from './inventory.schemas.js';
 import { inventoryService } from './inventory.service.js';
@@ -38,6 +39,22 @@ inventoryRouter.get('/stats', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (
 
   const stats = await inventoryService.stats(orgId);
   res.json(ok(stats));
+});
+
+inventoryRouter.get('/movements', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
+  const orgId = getOrganizationScope(req);
+  if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
+
+  const query = inventoryMovementQuerySchema.parse(req.query);
+  const { movements, total } = await inventoryService.listMovements(
+    orgId,
+    query.page,
+    query.pageSize,
+    query.changeType,
+    query.search,
+  );
+
+  res.json(paged(movements, query.page, query.pageSize, total));
 });
 
 inventoryRouter.get('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
@@ -73,7 +90,7 @@ inventoryRouter.patch('/:id', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, re
   res.json(ok(item, 'Inventory item updated'));
 });
 
-inventoryRouter.post('/:id/adjust-stock', allowRoles(SUPER_ADMIN, ORG_ADMIN), async (req, res) => {
+inventoryRouter.post('/:id/adjust-stock', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), async (req, res) => {
   const orgId = getOrganizationScope(req);
   if (!orgId) throw new HttpError(400, 'Organization context required', 'ORG_REQUIRED');
 

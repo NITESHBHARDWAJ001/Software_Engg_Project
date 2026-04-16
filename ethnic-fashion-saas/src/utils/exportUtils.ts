@@ -90,46 +90,84 @@ export const exportToPDF = async (
     format: 'a4',
   });
 
-  let yPosition = 20;
+  let yPosition = 14;
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 15;
   const contentWidth = pageWidth - 2 * margin;
+  const footer = (page: number) => {
+    pdf.setFontSize(8);
+    pdf.setTextColor(130);
+    pdf.text(`Page ${page}`, pageWidth - margin, pageHeight - 6, { align: 'right' });
+    pdf.setTextColor(0);
+  };
+  let pageNumber = 1;
+
+  const drawPageTop = (includeHeaderBand: boolean) => {
+    if (includeHeaderBand) {
+      pdf.setFillColor(14, 23, 38);
+      pdf.rect(0, 0, pageWidth, 28, 'F');
+    }
+  };
+
+  const addNewPage = () => {
+    footer(pageNumber);
+    pdf.addPage();
+    pageNumber += 1;
+    yPosition = 20;
+  };
+
+  drawPageTop(true);
 
   // Add Title
   if (title) {
-    pdf.setFontSize(18);
+    pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(255);
     pdf.text(title, margin, yPosition);
-    yPosition += 10;
+    pdf.setTextColor(0);
+    yPosition += 7;
   }
 
   // Add Subtitle
   if (subtitle) {
-    pdf.setFontSize(10);
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(100);
+    pdf.setTextColor(215);
     pdf.text(subtitle, margin, yPosition);
-    yPosition += 8;
+    yPosition = 34;
     pdf.setTextColor(0);
+  } else {
+    yPosition = 30;
   }
 
   // Add Charts
   for (const { ref, title: chartTitle } of chartRefs) {
-    if (yPosition > pageHeight - 80) {
-      pdf.addPage();
-      yPosition = 20;
-    }
-
     try {
-      const canvas = await html2canvas(ref, { scale: 2, useCORS: true });
+      const canvas = await html2canvas(ref, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        onclone: (doc) => {
+          const body = doc.body;
+          if (body) {
+            body.style.background = '#ffffff';
+          }
+        },
+      });
       const imgData = canvas.toDataURL('image/png');
       const imgWidth = contentWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const chartTitleHeight = chartTitle ? 8 : 0;
+
+      if (yPosition + chartTitleHeight + imgHeight > pageHeight - 20) {
+        addNewPage();
+      }
 
       if (chartTitle) {
         pdf.setFontSize(12);
         pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(32);
         pdf.text(chartTitle, margin, yPosition);
         yPosition += 8;
       }
@@ -144,42 +182,77 @@ export const exportToPDF = async (
   // Add Table Data
   if (data.length > 0 && headers.length > 0) {
     if (yPosition > pageHeight - 60) {
-      pdf.addPage();
-      yPosition = 20;
+      addNewPage();
     }
 
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'bold');
-    pdf.setFillColor(230, 230, 230);
+    pdf.setFillColor(236, 240, 246);
 
     // Table header
     const colWidth = contentWidth / headers.length;
+    const baseRowHeight = 7;
     headers.forEach((header, idx) => {
-      pdf.rect(margin + idx * colWidth, yPosition - 5, colWidth, 7, 'F');
-      pdf.text(header, margin + idx * colWidth + 1, yPosition, { maxWidth: colWidth - 2 });
+      pdf.setFillColor(236, 240, 246);
+      pdf.rect(margin + idx * colWidth, yPosition - 5, colWidth, baseRowHeight, 'F');
+      pdf.setDrawColor(210, 216, 224);
+      pdf.rect(margin + idx * colWidth, yPosition - 5, colWidth, baseRowHeight, 'S');
+      pdf.setTextColor(25, 31, 45);
+      pdf.text(header, margin + idx * colWidth + 2, yPosition, { maxWidth: colWidth - 4 });
     });
 
     yPosition += 8;
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
+    pdf.setTextColor(45);
 
     // Table rows
-    data.forEach((row) => {
-      if (yPosition > pageHeight - 20) {
-        pdf.addPage();
-        yPosition = 20;
+    data.forEach((row, rowIndex) => {
+      const rowCellLines = headers.map((header) => {
+        const cellValue = String(row[header] ?? '');
+        return pdf.splitTextToSize(cellValue, colWidth - 4).slice(0, 3);
+      });
+      const maxLines = Math.max(1, ...rowCellLines.map((lines) => lines.length));
+      const rowHeight = Math.max(baseRowHeight, maxLines * 4 + 2);
+
+      if (yPosition + rowHeight > pageHeight - 15) {
+        addNewPage();
+
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        headers.forEach((header, idx) => {
+          pdf.setFillColor(236, 240, 246);
+          pdf.rect(margin + idx * colWidth, yPosition - 5, colWidth, baseRowHeight, 'F');
+          pdf.setDrawColor(210, 216, 224);
+          pdf.rect(margin + idx * colWidth, yPosition - 5, colWidth, baseRowHeight, 'S');
+          pdf.setTextColor(25, 31, 45);
+          pdf.text(header, margin + idx * colWidth + 2, yPosition, { maxWidth: colWidth - 4 });
+        });
+        yPosition += 8;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(45);
       }
 
-      headers.forEach((header, idx) => {
-        const cellValue = String(row[header] ?? '');
-        pdf.text(cellValue, margin + idx * colWidth + 1, yPosition, {
-          maxWidth: colWidth - 2,
+      if (rowIndex % 2 === 1) {
+        pdf.setFillColor(250, 251, 253);
+        pdf.rect(margin, yPosition - 5, contentWidth, rowHeight, 'F');
+      }
+
+      headers.forEach((_header, idx) => {
+        const lines = rowCellLines[idx];
+        pdf.text(lines, margin + idx * colWidth + 2, yPosition, {
+          maxWidth: colWidth - 4,
         });
+        pdf.setDrawColor(228, 232, 237);
+        pdf.rect(margin + idx * colWidth, yPosition - 5, colWidth, rowHeight, 'S');
       });
 
-      yPosition += 7;
+      yPosition += rowHeight;
     });
   }
+
+  footer(pageNumber);
 
   pdf.save(`${filename}.pdf`);
 };
@@ -198,10 +271,12 @@ export const downloadFile = (blob: Blob, filename: string) => {
 
 // Format currency for display
 export const formatCurrencyForExport = (value: number, currency: string = 'INR'): string => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
+  const formatted = new Intl.NumberFormat('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
+
+  return `${currency} ${formatted}`;
 };
 
 // Format date for display

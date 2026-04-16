@@ -8,6 +8,7 @@ import { Input } from '../../../components/ui/Input';
 import { Spinner } from '../../../components/ui/Spinner';
 import {
   inventoryApiService,
+  type InventoryMovementRecord,
   type InventoryRecord,
   type InventoryStats,
 } from '../../../services/api/inventoryService';
@@ -61,6 +62,11 @@ const InventoryPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [soldSearch, setSoldSearch] = useState('');
+  const [selectedSoldItemId, setSelectedSoldItemId] = useState<string>('');
+  const [soldQuantity, setSoldQuantity] = useState('1');
+  const [soldNote, setSoldNote] = useState('Sold from counter');
+  const [recentSoldMovements, setRecentSoldMovements] = useState<InventoryMovementRecord[]>([]);
 
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -77,9 +83,16 @@ const InventoryPage = () => {
         inventoryApiService.stats(),
         inventoryApiService.lowStockAlerts(),
       ]);
+
+      const soldMovements = await inventoryApiService.listMovements({
+        changeType: 'OUT',
+        pageSize: 50,
+      });
+
       setItems(list);
       setStats(statsData);
       setLowStockItems(alerts);
+      setRecentSoldMovements(soldMovements);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load inventory');
     } finally {
@@ -98,6 +111,19 @@ const InventoryPage = () => {
       [item.name, item.sku, item.category, item.status].join(' ').toLowerCase().includes(q),
     );
   }, [items, search]);
+
+  const soldItemOptions = useMemo(() => {
+    const query = soldSearch.trim().toLowerCase();
+    if (!query) return items.slice(0, 50);
+    return items.filter((item) =>
+      [item.name, item.sku, item.category].join(' ').toLowerCase().includes(query),
+    ).slice(0, 50);
+  }, [items, soldSearch]);
+
+  const selectedSoldItem = useMemo(
+    () => items.find((item) => item.id === selectedSoldItemId) || null,
+    [items, selectedSoldItemId],
+  );
 
   const updateItemField = (field: keyof InventoryForm, value: string) => {
     setItemForm((prev) => ({ ...prev, [field]: value }));
@@ -209,6 +235,42 @@ const InventoryPage = () => {
     }
   };
 
+  const submitSoldStock = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedSoldItemId) {
+      toast.error('Please select an item to update sold stock');
+      return;
+    }
+
+    const quantity = toNumber(soldQuantity);
+    if (quantity <= 0) {
+      toast.error('Sold quantity must be greater than zero');
+      return;
+    }
+
+    if (selectedSoldItem && quantity > selectedSoldItem.currentStock) {
+      toast.error('Sold quantity is greater than available stock');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await inventoryApiService.adjustStock(selectedSoldItemId, {
+        quantity,
+        changeType: 'OUT',
+        note: soldNote.trim() || 'Sold',
+      });
+
+      toast.success('Sold stock updated');
+      setSoldQuantity('1');
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update sold stock');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -280,6 +342,103 @@ const InventoryPage = () => {
           </CardBody>
         </Card>
       )}
+
+      <Card>
+        <CardHeader
+          title="Sold Stock Update"
+          subtitle="Use searchable selection to decrease stock when an item is sold"
+        />
+        <CardBody>
+          <form onSubmit={submitSoldStock} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Input
+              label="Search Item"
+              value={soldSearch}
+              onChange={(e) => setSoldSearch(e.target.value)}
+              placeholder="Search by item name, SKU, category"
+              leftIcon={<FiSearch className="w-4 h-4" />}
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select Item</label>
+              <select
+                className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                value={selectedSoldItemId}
+                onChange={(e) => setSelectedSoldItemId(e.target.value)}
+                required
+              >
+                <option value="">Select item</option>
+                {soldItemOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.sku}) - Stock: {item.currentStock}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Sold Quantity"
+              type="number"
+              min="1"
+              value={soldQuantity}
+              onChange={(e) => setSoldQuantity(e.target.value)}
+              required
+            />
+            <Input
+              label="Remarks"
+              value={soldNote}
+              onChange={(e) => setSoldNote(e.target.value)}
+              placeholder="Sale note or invoice reference"
+            />
+            <div className="md:col-span-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg bg-gray-50 p-4">
+              <div className="text-sm text-gray-700">
+                {selectedSoldItem ? (
+                  <>
+                    <div className="font-medium text-gray-900">{selectedSoldItem.name} ({selectedSoldItem.sku})</div>
+                    <div>
+                      Available: {selectedSoldItem.currentStock} {selectedSoldItem.unit} | Selling Price: {formatCurrency(selectedSoldItem.sellingPrice)}
+                    </div>
+                  </>
+                ) : (
+                  'Select an item to preview stock and pricing details'
+                )}
+              </div>
+              <Button type="submit" isLoading={saving}>Apply Sold Update</Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="Recent Sold Movements" subtitle="Latest stock deductions from sales" />
+        <CardBody>
+          {recentSoldMovements.length === 0 ? (
+            <div className="text-sm text-gray-500">No sold movements recorded yet</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Item</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">SKU</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Quantity</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Date</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentSoldMovements.slice(0, 12).map((movement) => (
+                    <tr key={movement.id} className="border-b border-gray-100">
+                      <td className="py-3 px-4 text-sm text-gray-900">{movement.item?.name || 'Unknown item'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{movement.item?.sku || '-'}</td>
+                      <td className="py-3 px-4 text-sm font-medium text-danger-600">{Math.abs(movement.quantity)}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{formatDate(movement.createdAt)}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{movement.note || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       {adjustingItemId && (
         <Card>

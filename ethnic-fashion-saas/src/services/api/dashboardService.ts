@@ -19,6 +19,13 @@ export interface DashboardStats {
   completedTasks: number;
   upcomingExhibitions: number;
   recentLeads: number;
+  customerRfm: {
+    customerCount: number;
+    averageRecencyDays: number;
+    averageFrequency: number;
+    averageMonetary: number;
+    segments: Record<'CHAMPION' | 'LOYAL' | 'POTENTIAL_LOYALIST' | 'NEW_CUSTOMER' | 'AT_RISK' | 'NEEDS_ATTENTION', number>;
+  };
 }
 
 export interface RevenueChartData {
@@ -125,7 +132,7 @@ const buildRecentActivities = (
 
 const getCustomerGrowth = async () => {
   try {
-    const allCustomers = await customerApiService.list();
+    const allCustomers = await customerApiService.list(undefined, 'ALL');
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -187,6 +194,7 @@ export const dashboardApiService = {
       completedTasks: taskStats.completed,
       upcomingExhibitions,
       recentLeads: exhibitionStats.totalLeads,
+      customerRfm: customerStats.rfmSummary,
     };
 
     if (role === UserRole.STAFF) {
@@ -197,6 +205,20 @@ export const dashboardApiService = {
         totalCustomers: 0,
         customersChange: 0,
         lowStockItems: 0,
+        customerRfm: {
+          customerCount: 0,
+          averageRecencyDays: 0,
+          averageFrequency: 0,
+          averageMonetary: 0,
+          segments: {
+            CHAMPION: 0,
+            LOYAL: 0,
+            POTENTIAL_LOYALIST: 0,
+            NEW_CUSTOMER: 0,
+            AT_RISK: 0,
+            NEEDS_ATTENTION: 0,
+          },
+        },
       };
     }
 
