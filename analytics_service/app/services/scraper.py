@@ -6,6 +6,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import Competitor, Product, ProductPriceHistory, SocialPostSentiment
 from app.services.sentiment_analysis import analyze_text_sentiment
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,124 @@ def extract_products(soup, url):
                 "url": url[:500]
             })
 
-    # 3. Deep Fallback: Heuristics from generic HTML
+    # 3. Enhanced E-commerce Selectors (Shopify, WooCommerce, etc.)
+    if not products:
+        # First try to find product links (Shopify style)
+        product_links = soup.find_all('a', href=lambda x: x and '/products/' in x)
+        if product_links:
+            for link in product_links[:50]:  # Limit to 50 products
+                href = link.get('href')
+                if href:
+                    product_url = urljoin(url, href)
+                    
+                    # Try to find associated product info in parent elements
+                    parent = link.parent
+                    name = link.get_text(strip=True)
+                    
+                    # Look for price in nearby elements
+                    price = 0.0
+                    currency = 'USD'
+                    
+                    # Check siblings and parent for price
+                    for elem in [parent] + list(parent.find_all()) if parent else []:
+                        if elem.name in ['span', 'div', 'p'] and ('price' in elem.get('class', []) or 'money' in elem.get('class', [])):
+                            price_text = elem.get_text(strip=True)
+                            price_match = re.search(r'[\$₹€£]?(\d+(?:,\d{3})*(?:\.\d{2})?)', price_text)
+                            if price_match:
+                                try:
+                                    price = float(price_match.group(1).replace(',', ''))
+                                    break
+                                except ValueError:
+                                    pass
+                    
+                    # Look for image
+                    img_elem = parent.select_one('img') if parent else link.select_one('img')
+                    image_url = ""
+                    if img_elem:
+                        image_url = img_elem.get('src', '')
+                        if image_url.startswith('//'):
+                            image_url = 'https:' + image_url
+                        elif image_url.startswith('/'):
+                            image_url = urljoin(url, image_url)
+                    
+                    if name and len(name) > 3:  # Filter out very short names
+                        products.append({
+                            "name": name[:250],
+                            "category": "General",
+                            "price": price,
+                            "currency": currency,
+                            "image_url": image_url[:500],
+                            "url": product_url[:500]
+                        })
+        else:
+            # Common product card selectors for different platforms
+            product_selectors = [
+                '.product-item', '.product-card', '.product', '.item',
+                '[data-product-id]', '[data-product-handle]',
+                '.grid-item', '.collection-item', '.product-grid-item',
+                '.product-list-item', '.shopify-product-item',
+                # Shopify specific
+                '.product-single__meta', '.product-info', '.product-details',
+                # Generic e-commerce
+                '.card', '.grid__item', '.collection__item',
+            ]
+            
+            # Common product card selectors for different platforms
+            for selector in product_selectors:
+                product_elements = soup.select(selector)
+                if product_elements:
+                    for elem in product_elements[:20]:  # Limit to 20 products
+                        # Extract product name
+                        name_elem = elem.select_one('h3, h4, .product-title, .title, a[title], .card-title')
+                        name = name_elem.get_text(strip=True) if name_elem else "Unknown Product"
+                        
+                        # Extract price
+                        price_elem = elem.select_one('.price, .product-price, [data-price], .money, .price__current')
+                        price = 0.0
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            # Extract numeric price from text like "$29.99", "₹1,299", "29.99 USD"
+                            price_match = re.search(r'[\$₹€£]?(\d+(?:,\d{3})*(?:\.\d{2})?)', price_text)
+                            if price_match:
+                                try:
+                                    price = float(price_match.group(1).replace(',', ''))
+                                except ValueError:
+                                    pass
+                        
+                        # Extract image
+                        img_elem = elem.select_one('img')
+                        image_url = ""
+                        if img_elem:
+                            image_url = img_elem.get('src', '')
+                            if image_url.startswith('//'):
+                                image_url = 'https:' + image_url
+                            elif image_url.startswith('/'):
+                                # Try to construct full URL
+                                from urllib.parse import urljoin
+                                image_url = urljoin(url, image_url)
+                        
+                        # Extract product URL
+                        link_elem = elem.select_one('a')
+                        product_url = url
+                        if link_elem:
+                            href = link_elem.get('href')
+                            if href:
+                                product_url = urljoin(url, href)
+                        
+                        if name and name != "Unknown Product":
+                            products.append({
+                                "name": name[:250],
+                                "category": "General",
+                                "price": price,
+                                "currency": "USD",
+                                "image_url": image_url[:500],
+                                "url": product_url[:500]
+                            })
+                    
+                    if products:
+                        break  # Stop if we found products with this selector
+
+    # 4. Deep Fallback: Heuristics from generic HTML
     if not products:
         title = soup.title.string if soup.title else "Unknown Title"
         price_match = re.search(r'\$\s?(\d+(?:\.\d{2})?)', soup.get_text())

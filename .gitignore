@@ -4,3 +4,9 @@ backend/dist/
 backend/.env
 backend/.env.*
 !.env.example
+
+# Python cache files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo

@@ -3,6 +3,8 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import { 
   FiHome, FiCheckSquare, FiCalendar, FiUsers, FiPackage, 
   FiDollarSign, FiTrendingUp, FiSettings, FiMenu, FiX,
+   FiStar, FiSliders, FiTarget, FiFeather,
+  FiPercent, FiCompass, FiFileText, FiMessageCircle, FiImage, FiArchive,
   FiLogOut, FiChevronDown
 } from 'react-icons/fi';
 import { useAuthStore, useCurrentOrganization } from '../../store';
@@ -32,6 +34,16 @@ const getSidebarItems = (role: UserRole): SidebarItem[] => {
     { label: 'Inventory', icon: <FiPackage />, path: ROUTES.INVENTORY, module: 'inventory' },
     { label: 'Finance', icon: <FiDollarSign />, path: ROUTES.FINANCE, module: 'finance' },
     { label: 'Analytics', icon: <FiTrendingUp />, path: ROUTES.ANALYTICS, module: 'analytics' },
+    { label: 'AI Stylist', icon: <FiStar />, path: '/app/ai-stylist', module: 'analytics' },
+    { label: 'Size & Fit', icon: <FiSliders />, path: '/app/ai-size-fit', module: 'analytics' },
+    { label: 'Trend Forecast', icon: <FiTarget />, path: '/app/ai-trend-forecast', module: 'analytics' },
+    { label: 'Design Copilot', icon: <FiFeather />, path: '/app/ai-design-copilot', module: 'analytics' },
+    { label: 'Dynamic Pricing', icon: <FiPercent />, path: '/app/ai-dynamic-pricing', module: 'analytics' },
+    { label: 'Discovery Feed', icon: <FiCompass />, path: '/app/ai-discovery-feed', module: 'analytics' },
+    { label: 'Product Content', icon: <FiFileText />, path: '/app/ai-product-content', module: 'analytics' },
+    { label: 'Support Assistant', icon: <FiMessageCircle />, path: '/app/ai-support-assistant', module: 'analytics' },
+    { label: 'Visual Search', icon: <FiImage />, path: '/app/ai-visual-search', module: 'analytics' },
+    { label: 'Replenishment', icon: <FiArchive />, path: '/app/ai-inventory-replenishment', module: 'analytics' },
     { label: 'Settings', icon: <FiSettings />, path: ROUTES.SETTINGS, module: 'settings' },
   ];
 

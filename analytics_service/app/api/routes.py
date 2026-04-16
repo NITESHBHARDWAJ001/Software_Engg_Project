@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, desc
@@ -8,6 +9,114 @@ from datetime import datetime, timedelta
 from app.db.database import get_db
 from app.services import scraper, competitor_analysis, trend_detection, report_generator
 from app.services.ai_generative import generate_defensive_copy
+from app.services.fashion_ai import (
+    generate_personalized_outfit_recommendations,
+    predict_size_and_fit,
+    forecast_fashion_trends,
+    generate_design_copilot_concepts,
+    generate_dynamic_pricing_recommendation,
+    generate_personalized_discovery_feed,
+    generate_product_content_bundle,
+    generate_support_assistant_response,
+    generate_visual_search_matches,
+    generate_inventory_replenishment_plan,
+)
+from app.models.models import SocialPostSentiment, Competitor, Product, ProductPriceHistory, TrendReport
+
+router = APIRouter()
+
+
+class StylistRequest(BaseModel):
+    user_profile: Dict[str, Any]
+    occasion: str = Field(..., min_length=2)
+    budget: float = Field(..., gt=0)
+    preferences: Optional[List[str]] = None
+
+class SizeFitRequest(BaseModel):
+    measurements: Dict[str, Any]
+    garment_type: str = Field(..., min_length=2)
+    gender: str = Field(..., pattern="^(male|female)$")
+    fit_preference: str = Field(..., pattern="^(fitted|relaxed|loose)$")
+    brand_region: Optional[str] = None
+
+
+class TrendForecastRequest(BaseModel):
+    season: str = Field(..., min_length=2)
+    region: str = Field(..., min_length=2)
+    product_category: str = Field(..., min_length=2)
+    target_gender: str = Field(..., pattern="^(male|female|unisex)$")
+    price_segment: str = Field(..., min_length=2)
+
+
+class DesignCopilotRequest(BaseModel):
+    collection_name: str = Field(..., min_length=2)
+    season: str = Field(..., min_length=2)
+    region: str = Field(..., min_length=2)
+    target_gender: str = Field(..., pattern="^(male|female|unisex)$")
+    product_category: str = Field(..., min_length=2)
+    inspiration_keywords: Optional[List[str]] = None
+
+
+class DynamicPricingRequest(BaseModel):
+    product_name: str = Field(..., min_length=2)
+    category: str = Field(..., min_length=2)
+    current_price: float = Field(..., gt=0)
+    cost_price: float = Field(..., gt=0)
+    stock_units: int = Field(..., ge=0)
+    demand_signal: str = Field(..., min_length=2)
+    season: str = Field(..., min_length=2)
+    competitor_prices: Optional[List[float]] = None
+
+
+class DiscoveryFeedRequest(BaseModel):
+    customer_name: str = Field(..., min_length=2)
+    location: str = Field(..., min_length=2)
+    browsing_history: Optional[List[str]] = None
+    purchase_history: Optional[List[str]] = None
+    upcoming_occasions: Optional[List[str]] = None
+    preferred_categories: Optional[List[str]] = None
+
+
+class ProductContentRequest(BaseModel):
+    product_name: str = Field(..., min_length=2)
+    category: str = Field(..., min_length=2)
+    fabric: str = Field(..., min_length=2)
+    color: str = Field(..., min_length=2)
+    embellishments: Optional[List[str]] = None
+    target_audience: str = Field(..., min_length=2)
+    tone: str = Field(..., min_length=2)
+    languages: Optional[List[str]] = None
+
+
+class SupportAssistantRequest(BaseModel):
+    customer_question: str = Field(..., min_length=3)
+    product_context: Optional[Dict[str, Any]] = None
+    size_context: Optional[Dict[str, Any]] = None
+    shipping_policy: Optional[str] = None
+    return_policy: Optional[str] = None
+
+
+class VisualSearchRequest(BaseModel):
+    image_description: Optional[str] = None
+    image_url: Optional[str] = None
+    target_category: Optional[str] = None
+    occasion: Optional[str] = None
+    budget: Optional[float] = Field(default=None, gt=0)
+    region: Optional[str] = None
+    style_preferences: Optional[List[str]] = None
+
+
+class InventoryReplenishmentRequest(BaseModel):
+    sku: str = Field(..., min_length=2)
+    product_name: str = Field(..., min_length=2)
+    category: str = Field(..., min_length=2)
+    current_stock: int = Field(..., ge=0)
+    avg_weekly_sales: float = Field(..., ge=0)
+    lead_time_days: int = Field(..., ge=0)
+    season: str = Field(..., min_length=2)
+    region: str = Field(..., min_length=2)
+    current_open_po_units: int = Field(default=0, ge=0)
+    service_level: str = Field(default="medium", pattern="^(low|medium|high)$")
 from app.models.models import SocialPostSentiment, Competitor, Product, ProductPriceHistory, TrendReport, Organization, StockContextEntry
 
 router = APIRouter()
@@ -39,6 +148,160 @@ class SeedSampleDataIn(BaseModel):
 def read_root():
     return {"message": "Analytics Service API"}
 
+
+@router.post("/ai/stylist")
+async def ai_personal_stylist(payload: StylistRequest):
+    result = await generate_personalized_outfit_recommendations(
+        user_profile=payload.user_profile,
+        occasion=payload.occasion,
+        budget=payload.budget,
+        preferences=payload.preferences,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Stylist generation failed"))
+
+    return {"status": "success", "data": {"recommendations": result.get("recommendations", [])}}
+
+@router.post("/ai/size-fit")
+async def ai_size_fit_predictor(payload: SizeFitRequest):
+    result = await predict_size_and_fit(
+        measurements=payload.measurements,
+        garment_type=payload.garment_type,
+        gender=payload.gender,
+        fit_preference=payload.fit_preference,
+        brand_region=payload.brand_region,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Size prediction failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/trend-forecast")
+async def ai_trend_forecast(payload: TrendForecastRequest):
+    result = await forecast_fashion_trends(
+        season=payload.season,
+        region=payload.region,
+        product_category=payload.product_category,
+        target_gender=payload.target_gender,
+        price_segment=payload.price_segment,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Trend forecast failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/design-copilot")
+async def ai_design_copilot(payload: DesignCopilotRequest):
+    result = await generate_design_copilot_concepts(
+        collection_name=payload.collection_name,
+        season=payload.season,
+        region=payload.region,
+        target_gender=payload.target_gender,
+        product_category=payload.product_category,
+        inspiration_keywords=payload.inspiration_keywords,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Design concept generation failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/dynamic-pricing")
+async def ai_dynamic_pricing(payload: DynamicPricingRequest):
+    result = await generate_dynamic_pricing_recommendation(
+        product_name=payload.product_name,
+        category=payload.category,
+        current_price=payload.current_price,
+        cost_price=payload.cost_price,
+        stock_units=payload.stock_units,
+        demand_signal=payload.demand_signal,
+        season=payload.season,
+        competitor_prices=payload.competitor_prices,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Dynamic pricing failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/discovery-feed")
+async def ai_discovery_feed(payload: DiscoveryFeedRequest):
+    result = await generate_personalized_discovery_feed(
+        customer_name=payload.customer_name,
+        location=payload.location,
+        browsing_history=payload.browsing_history,
+        purchase_history=payload.purchase_history,
+        upcoming_occasions=payload.upcoming_occasions,
+        preferred_categories=payload.preferred_categories,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Discovery feed generation failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/product-content")
+async def ai_product_content(payload: ProductContentRequest):
+    result = await generate_product_content_bundle(
+        product_name=payload.product_name,
+        category=payload.category,
+        fabric=payload.fabric,
+        color=payload.color,
+        embellishments=payload.embellishments,
+        target_audience=payload.target_audience,
+        tone=payload.tone,
+        languages=payload.languages,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Product content generation failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/support-assistant")
+async def ai_support_assistant(payload: SupportAssistantRequest):
+    result = await generate_support_assistant_response(
+        customer_question=payload.customer_question,
+        product_context=payload.product_context,
+        size_context=payload.size_context,
+        shipping_policy=payload.shipping_policy,
+        return_policy=payload.return_policy,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Support assistant response failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/visual-search")
+async def ai_visual_search(payload: VisualSearchRequest):
+    result = await generate_visual_search_matches(
+        image_description=payload.image_description,
+        image_url=payload.image_url,
+        target_category=payload.target_category,
+        occasion=payload.occasion,
+        budget=payload.budget,
+        region=payload.region,
+        style_preferences=payload.style_preferences,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Visual search failed"))
+    return {"status": "success", "data": result.get("result", {})}
+
+
+@router.post("/ai/inventory-replenishment")
+async def ai_inventory_replenishment(payload: InventoryReplenishmentRequest):
+    result = await generate_inventory_replenishment_plan(
+        sku=payload.sku,
+        product_name=payload.product_name,
+        category=payload.category,
+        current_stock=payload.current_stock,
+        avg_weekly_sales=payload.avg_weekly_sales,
+        lead_time_days=payload.lead_time_days,
+        season=payload.season,
+        region=payload.region,
+        current_open_po_units=payload.current_open_po_units,
+        service_level=payload.service_level,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Inventory replenishment prediction failed"))
+    return {"status": "success", "data": result.get("result", {})}
 @router.post("/orgs/upsert")
 async def upsert_organization(payload: OrganizationUpsert, db: AsyncSession = Depends(get_db)):
     stmt = select(Organization).where(Organization.org_id == payload.org_id)

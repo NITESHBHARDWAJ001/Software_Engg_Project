@@ -20,6 +20,7 @@ import { exhibitionsRouter } from './modules/exhibitions/exhibitions.routes.js';
 import { notificationRouter } from './modules/notifications/notifications.routes.js';
 import { subscriptionRouter } from './modules/subscriptions/subscription.routes.js';
 import { analyticsRouter } from './modules/analytics/analytics.routes.js';
+import { socialRouter } from './modules/social/social.routes.js';
 import { requestContext } from './shared/middleware/requestContext.js';
 import { notFoundHandler } from './shared/middleware/notFound.js';
 import { errorHandler } from './shared/middleware/errorHandler.js';
@@ -83,6 +84,7 @@ app.use('/api/v1/exhibitions', exhibitionsRouter);
 app.use('/api/v1/notifications', notificationRouter);
 app.use('/api/v1/subscriptions', subscriptionRouter);
 app.use('/api/v1/analytics', analyticsRouter);
+app.use('/api/v1/social', socialRouter);
 
 const openApiSpec = getOpenApiSpec();
 app.get('/api-docs.json', (_req, res) => {

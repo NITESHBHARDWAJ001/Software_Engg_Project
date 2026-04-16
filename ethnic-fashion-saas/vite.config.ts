@@ -6,8 +6,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      '/api/v1/ai': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:4002',
         changeOrigin: true,
       },
     },
