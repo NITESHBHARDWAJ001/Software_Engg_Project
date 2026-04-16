@@ -1,0 +1,12 @@
+# Normalize line endings in the repository
+* text=auto
+
+# Keep Python source files with LF line endings
+*.py text eol=lf
+
+# Text-based control files and docs should also use LF
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
