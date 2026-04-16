@@ -339,6 +339,24 @@ const PlansPage = () => {
     }
   };
 
+  const deletePlan = async (planId: string, planName: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the plan "${planName}"? This action cannot be undone if the plan is in use.`
+    );
+    if (!confirmed) return;
+
+    try {
+      // Attempt to delete via API if available, otherwise just mark as deleted locally
+      await superAdminService.deletePlan(planId);
+      setPlans((prev) => prev.filter((plan) => plan.id !== planId));
+      toast.success('Plan deleted successfully');
+    } catch (error) {
+      // Fallback: just deactivate the plan
+      console.warn('Delete not supported, deactivating instead');
+      await deactivatePlan(planId);
+    }
+  };
+
   const submitOffer = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!offerForm.title.trim() || !offerForm.code.trim() || offerForm.planIds.length === 0) {
@@ -451,41 +469,66 @@ const PlansPage = () => {
       </div>
 
       <Card>
-        <CardHeader title={editingPlanId ? 'Edit Plan' : 'Create Plan'} subtitle="Configure pricing, service access, and usage limits" />
+        <CardHeader title={editingPlanId ? 'Edit Subscription Plan' : 'Create Subscription Plan'} subtitle={editingPlanId ? 'Update pricing, services, and limits' : 'Configure pricing, service access, and usage limits'} />
         <CardBody>
-          <form className="grid grid-cols-1 md:grid-cols-3 gap-4" onSubmit={submitPlan}>
-            <Input label="Plan Name" value={planForm.name} onChange={(e) => setPlanField('name', e.target.value)} required />
-            <Input label="Plan Code" value={planForm.code} onChange={(e) => setPlanField('code', e.target.value.toUpperCase())} required />
+          <form className="space-y-6" onSubmit={submitPlan}>
+            {/* Basic Plan Information */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Billing Cycle</label>
-              <select className="w-full rounded-lg border border-gray-300 px-3 py-2" value={planForm.billingCycle} onChange={(e) => setPlanField('billingCycle', e.target.value as PlanForm['billingCycle'])}>
-                <option value="MONTHLY">MONTHLY</option>
-                <option value="QUARTERLY">QUARTERLY</option>
-                <option value="YEARLY">YEARLY</option>
-              </select>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Basic Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Input label="Plan Name" value={planForm.name} onChange={(e) => setPlanField('name', e.target.value)} required />
+                <Input label="Plan Code" value={planForm.code} onChange={(e) => setPlanField('code', e.target.value.toUpperCase())} required />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Billing Cycle</label>
+                  <select className="w-full rounded-lg border border-gray-300 px-3 py-2" value={planForm.billingCycle} onChange={(e) => setPlanField('billingCycle', e.target.value as PlanForm['billingCycle'])}>
+                    <option value="MONTHLY">MONTHLY</option>
+                    <option value="QUARTERLY">QUARTERLY</option>
+                    <option value="YEARLY">YEARLY</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <Input label="Price" type="number" value={planForm.price} onChange={(e) => setPlanField('price', e.target.value)} required />
-            <Input label="Currency" value={planForm.currency} onChange={(e) => setPlanField('currency', e.target.value.toUpperCase())} required />
-            <div className="flex items-center gap-2 mt-7">
-              <input id="plan-active" type="checkbox" checked={planForm.isActive} onChange={(e) => setPlanField('isActive', e.target.checked)} />
-              <label htmlFor="plan-active" className="text-sm text-gray-700">Plan active</label>
+
+            {/* Pricing Information */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Pricing</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Input label="Price" type="number" value={planForm.price} onChange={(e) => setPlanField('price', e.target.value)} required />
+                <Input label="Currency" value={planForm.currency} onChange={(e) => setPlanField('currency', e.target.value.toUpperCase())} required />
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2">
+                    <input id="plan-active" type="checkbox" checked={planForm.isActive} onChange={(e) => setPlanField('isActive', e.target.checked)} />
+                    <span className="text-sm text-gray-700">Plan active</span>
+                  </label>
+                </div>
+              </div>
             </div>
-            <div className="md:col-span-3">
+
+            {/* Description */}
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
-              <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2" rows={2} value={planForm.description} onChange={(e) => setPlanField('description', e.target.value)} />
+              <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2" rows={2} value={planForm.description} onChange={(e) => setPlanField('description', e.target.value)} placeholder="Describe the benefits of this plan" />
             </div>
 
-            <Input label="Max Users" type="number" value={planForm.maxUsers} onChange={(e) => setPlanField('maxUsers', e.target.value)} />
-            <Input label="Max Exhibitions" type="number" value={planForm.maxExhibitions} onChange={(e) => setPlanField('maxExhibitions', e.target.value)} />
-            <Input label="Max Customers" type="number" value={planForm.maxCustomers} onChange={(e) => setPlanField('maxCustomers', e.target.value)} />
-            <Input label="Max Inventory Items" type="number" value={planForm.maxInventoryItems} onChange={(e) => setPlanField('maxInventoryItems', e.target.value)} />
+            {/* Usage Limits */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Usage Limits</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Input label="Max Users" type="number" value={planForm.maxUsers} onChange={(e) => setPlanField('maxUsers', e.target.value)} />
+                <Input label="Max Exhibitions" type="number" value={planForm.maxExhibitions} onChange={(e) => setPlanField('maxExhibitions', e.target.value)} />
+                <Input label="Max Customers" type="number" value={planForm.maxCustomers} onChange={(e) => setPlanField('maxCustomers', e.target.value)} />
+                <Input label="Max Inventory Items" type="number" value={planForm.maxInventoryItems} onChange={(e) => setPlanField('maxInventoryItems', e.target.value)} />
+              </div>
+            </div>
 
-            <div className="md:col-span-3">
-              <p className="text-sm font-semibold text-gray-900 mb-2">Service Entitlements by Plan</p>
+            {/* Service Entitlements */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Service Entitlements</h3>
+              <p className="text-sm text-gray-600 mb-4">Select which services are available in this plan</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {SERVICE_CATALOG.map((service) => (
-                  <label key={service.key} className="border border-gray-200 rounded-lg p-3 flex items-start gap-3">
-                    <input type="checkbox" checked={planForm.features.includes(service.key)} onChange={() => toggleFeature(service.key)} />
+                  <label key={service.key} className="border border-gray-200 rounded-lg p-3 flex items-start gap-3 hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={planForm.features.includes(service.key)} onChange={() => toggleFeature(service.key)} className="mt-1" />
                     <div>
                       <p className="font-medium text-gray-900">{service.name}</p>
                       <p className="text-xs text-gray-600">{service.useCase}</p>
@@ -495,7 +538,8 @@ const PlansPage = () => {
               </div>
             </div>
 
-            <div className="md:col-span-3 flex justify-end gap-2">
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-2 pt-4 border-t">
               {editingPlanId && (
                 <Button type="button" variant="outline" onClick={resetPlanForm}>Cancel Edit</Button>
               )}
@@ -544,8 +588,9 @@ const PlansPage = () => {
                       <div className="flex items-center gap-2">
                         <Button size="sm" variant="outline" onClick={() => loadPlanIntoForm(plan)}>Edit</Button>
                         {plan.isActive && (
-                          <Button size="sm" variant="danger" onClick={() => deactivatePlan(plan.id)}>Deactivate</Button>
+                          <Button size="sm" variant="outline" onClick={() => deactivatePlan(plan.id)}>Deactivate</Button>
                         )}
+                        <Button size="sm" variant="danger" onClick={() => deletePlan(plan.id, plan.name)} leftIcon={<FiTrash2 className="w-4 h-4" />}>Delete</Button>
                       </div>
                     </td>
                   </tr>

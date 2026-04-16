@@ -594,6 +594,22 @@ export default function TasksPage() {
                                 </select>
                               </div>
                             )}
+                            {!isStaffUser && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500">Update:</span>
+                                <select
+                                  className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-800"
+                                  value={task.status}
+                                  onChange={(e) => moveTaskStatus(task, e.target.value as TaskStatus)}
+                                >
+                                  {Object.values(TaskStatus).map((status) => (
+                                    <option key={status} value={status}>
+                                      {status.replace('_', ' ')}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                             {task.tags && task.tags.length > 0 && (
                               <div className="flex gap-2">
                                 {task.tags.map((tag, index) => (
@@ -681,6 +697,18 @@ export default function TasksPage() {
                           >
                             <FiChevronLeft className="w-4 h-4" />
                           </Button>
+                          <select
+                            className="text-xs rounded border border-gray-300 bg-white px-2 py-1 text-gray-800"
+                            value={task.status}
+                            disabled={isStaffUser && task.assignedTo !== user?.id}
+                            onChange={(e) => moveTaskStatus(task, e.target.value as TaskStatus)}
+                          >
+                            {Object.values(TaskStatus).map((status) => (
+                              <option key={status} value={status}>
+                                {status.replace('_', ' ')}
+                              </option>
+                            ))}
+                          </select>
                           <Button
                             size="sm"
                             variant="ghost"

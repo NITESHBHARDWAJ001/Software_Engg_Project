@@ -3,7 +3,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import { 
   FiHome, FiCheckSquare, FiCalendar, FiUsers, FiPackage, 
   FiDollarSign, FiTrendingUp, FiSettings, FiMenu, FiX,
-  FiBell, FiLogOut, FiChevronDown
+  FiLogOut, FiChevronDown
 } from 'react-icons/fi';
 import { useAuthStore, useCurrentOrganization } from '../../store';
 import { UserRole } from '../../types';
@@ -12,6 +12,7 @@ import { canAccessModule } from '../../utils/permissions';
 import { classNames } from '../../utils/helpers';
 import { Badge } from '../../components/ui';
 import { authService } from '../../services/api/authService';
+import NotificationBell from '../../components/NotificationBell';
 
 interface SidebarItem {
   label: string;
@@ -162,10 +163,7 @@ export const AppLayout: React.FC = () => {
 
             <div className="flex items-center space-x-4">
               {/* Notifications */}
-              <button className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
-                <FiBell size={20} />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-              </button>
+              <NotificationBell />
 
               {/* User Menu */}
               <div className="relative">

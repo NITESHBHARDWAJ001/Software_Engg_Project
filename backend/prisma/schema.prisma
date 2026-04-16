@@ -21,6 +21,14 @@ enum EmploymentType {
   TEMPORARY
 }
 
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  EXHIBITION_CREATED
+  EXHIBITION_UPDATED
+  EXHIBITION_ASSIGNED
+}
+
 model Organization {
   id          String   @id @default(uuid())
   name        String
@@ -70,6 +78,7 @@ model User {
   createdExhibitions Exhibition[] @relation("ExhibitionCreatedBy")
   capturedExhibitionLeads ExhibitionLead[] @relation("ExhibitionLeadCapturedBy")
   leadInteractions LeadInteraction[]
+  notifications  Notification[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -457,4 +466,20 @@ model LeadInteraction {
 
   @@index([leadId, createdAt])
   @@index([userId])
+}
+
+model Notification {
+  id          String            @id @default(uuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        NotificationType
+  read        Boolean           @default(false)
+  link        String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }

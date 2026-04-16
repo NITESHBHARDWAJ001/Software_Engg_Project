@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { FiCalendar, FiMapPin, FiPlus, FiUsers } from 'react-icons/fi';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { FiCalendar, FiMapPin, FiPlus, FiUsers, FiDownload } from 'react-icons/fi';
 import { toast } from 'sonner';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
@@ -9,6 +9,20 @@ import { Spinner } from '../../../components/ui/Spinner';
 import { exhibitionService } from '../../../services/api/exhibitionService';
 import { type Exhibition, type ExhibitionLead, ExhibitionStatus, LeadInterestLevel, LeadStatus } from '../../../types';
 import { formatCurrency, formatDate } from '../../../utils/helpers';
+import { exportToExcel, exportToPDF, formatCurrencyForExport, formatDateForExport } from '../../../utils/exportUtils';
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
 
 type ExhibitionForm = {
   name: string;
@@ -92,6 +106,11 @@ export default function ExhibitionsPage() {
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [leadForm, setLeadForm] = useState<LeadForm>(initialLeadForm);
 
+  // Chart refs for PDF export
+  const exhibitionStatusChartRef = useRef<HTMLDivElement>(null);
+  const leadsConversionChartRef = useRef<HTMLDivElement>(null);
+  const budgetUtilizationChartRef = useRef<HTMLDivElement>(null);
+
   const loadExhibitions = async () => {
     setLoading(true);
     try {
@@ -138,6 +157,83 @@ export default function ExhibitionsPage() {
 
   const setLeadField = (field: keyof LeadForm, value: string) => {
     setLeadForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const exportAnalyticsToExcel = async () => {
+    const dateStr = formatDateForExport(new Date());
+
+    // Exhibition status data
+    const statusData = [
+      { 'Status': 'Upcoming', 'Count': stats.upcoming },
+      { 'Status': 'Active', 'Count': stats.active },
+      { 'Status': 'Completed', 'Count': stats.completed },
+    ];
+
+    // Lead interest level distribution
+    const leadInterestData = [
+      { 'Interest Level': 'HOT', 'Count': leads.filter((l) => l.interestLevel === LeadInterestLevel.HOT).length },
+      { 'Interest Level': 'WARM', 'Count': leads.filter((l) => l.interestLevel === LeadInterestLevel.WARM).length },
+      { 'Interest Level': 'COLD', 'Count': leads.filter((l) => l.interestLevel === LeadInterestLevel.COLD).length },
+    ];
+
+    // Budget utilization
+    const budgetData = exhibitions.map((exhibit) => ({
+      'Exhibition': exhibit.name,
+      'Budget': exhibit.budget,
+      'Spent': exhibit.actualSpent ?? 0,
+      'Remaining': (exhibit.budget - (exhibit.actualSpent ?? 0)),
+      'Expected Revenue': exhibit.expectedRevenue,
+      'Actual Revenue': exhibit.actualRevenue,
+      'ROI %': exhibit.expectedRevenue > 0
+        ? (((exhibit.actualRevenue - (exhibit.actualSpent ?? 0)) / exhibit.expectedRevenue) * 100).toFixed(2)
+        : '0',
+    }));
+
+    exportToExcel(
+      [
+        { name: 'Exhibition Status', data: statusData },
+        { name: 'Lead Interest', data: leadInterestData },
+        { name: 'Budget Utilization', data: budgetData },
+      ],
+      `exhibitions-analytics-${dateStr}`
+    );
+    toast.success('Exported exhibition analytics as Excel');
+  };
+
+  const exportAnalyticsToPDF = async () => {
+    const dateStr = formatDateForExport(new Date());
+    const chartRefs: Array<{ ref: HTMLElement; title: string }> = [];
+
+    // Exhibition summary data
+    const summaryData = [
+      { 'Metric': 'Total Exhibitions', 'Value': stats.total.toString() },
+      { 'Metric': 'Upcoming', 'Value': stats.upcoming.toString() },
+      { 'Metric': 'Active', 'Value': stats.active.toString() },
+      { 'Metric': 'Completed', 'Value': stats.completed.toString() },
+      { 'Metric': 'Total Budget', 'Value': formatCurrencyForExport(stats.totalBudget) },
+      { 'Metric': 'Total Leads', 'Value': leads.length.toString() },
+      { 'Metric': 'Conversion Rate', 'Value': leads.length > 0 ? `${((leads.filter((l) => l.status === LeadStatus.CONVERTED).length / leads.length) * 100).toFixed(2)}%` : '0%' },
+    ];
+
+    if (exhibitionStatusChartRef.current) {
+      chartRefs.push({ ref: exhibitionStatusChartRef.current, title: 'Exhibition Status Distribution' });
+    }
+    if (leadsConversionChartRef.current) {
+      chartRefs.push({ ref: leadsConversionChartRef.current, title: 'Lead Interest Distribution' });
+    }
+    if (budgetUtilizationChartRef.current) {
+      chartRefs.push({ ref: budgetUtilizationChartRef.current, title: 'Budget Utilization' });
+    }
+
+    await exportToPDF({
+      filename: `exhibitions-${dateStr}`,
+      title: 'Exhibition Analytics Report',
+      subtitle: `Generated on ${dateStr}`,
+      data: summaryData,
+      headers: ['Metric', 'Value'],
+      chartRefs,
+    });
+    toast.success('Exported exhibition analytics as PDF');
   };
 
   const submitExhibition = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -339,10 +435,20 @@ export default function ExhibitionsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Exhibition Management</h1>
           <p className="text-gray-600 mt-1">Manage exhibitions and leads with live backend data</p>
         </div>
-        <Button onClick={() => setShowExhibitionForm((prev) => !prev)}>
-          <FiPlus className="w-4 h-4" />
-          New Exhibition
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportAnalyticsToExcel}>
+            <FiDownload className="w-4 h-4 mr-2" />
+            Export Excel
+          </Button>
+          <Button variant="outline" onClick={exportAnalyticsToPDF}>
+            <FiDownload className="w-4 h-4 mr-2" />
+            Export PDF
+          </Button>
+          <Button onClick={() => setShowExhibitionForm((prev) => !prev)}>
+            <FiPlus className="w-4 h-4" />
+            New Exhibition
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -352,6 +458,94 @@ export default function ExhibitionsPage() {
         <Card><CardBody><div className="text-sm text-gray-600">Completed</div><div className="text-2xl font-bold text-info-600">{stats.completed}</div></CardBody></Card>
         <Card><CardBody><div className="text-sm text-gray-600">Budget</div><div className="text-2xl font-bold">{formatCurrency(stats.totalBudget)}</div></CardBody></Card>
       </div>
+
+      {/* Analytics Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader title="Exhibition Status Distribution" />
+          <CardBody className="p-6">
+            <div ref={exhibitionStatusChartRef}>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Upcoming', value: stats.upcoming, fill: '#3b82f6' },
+                      { name: 'Active', value: stats.active, fill: '#10b981' },
+                      { name: 'Completed', value: stats.completed, fill: '#8b5cf6' },
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => `${name}: ${value}`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell key="cell-upcoming" fill="#3b82f6" />
+                    <Cell key="cell-active" fill="#10b981" />
+                    <Cell key="cell-completed" fill="#8b5cf6" />
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader title="Lead Interest Distribution" />
+          <CardBody className="p-6">
+            <div ref={leadsConversionChartRef}>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={[
+                    {
+                      name: 'Interest Level',
+                      'HOT': leads.filter((l) => l.interestLevel === LeadInterestLevel.HOT).length,
+                      'WARM': leads.filter((l) => l.interestLevel === LeadInterestLevel.WARM).length,
+                      'COLD': leads.filter((l) => l.interestLevel === LeadInterestLevel.COLD).length,
+                    },
+                  ]}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="HOT" fill="#ef4444" />
+                  <Bar dataKey="WARM" fill="#f59e0b" />
+                  <Bar dataKey="COLD" fill="#6b7280" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader title="Budget Utilization by Exhibition" />
+        <CardBody className="p-6">
+          <div ref={budgetUtilizationChartRef}>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart
+                data={exhibitions.map((ex) => ({
+                  name: ex.name.slice(0, 15),
+                  Budget: ex.budget,
+                  'Spent': ex.actualSpent ?? 0,
+                }))}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : 'N/A'} />
+                <Legend />
+                <Bar dataKey="Budget" fill="#3b82f6" />
+                <Bar dataKey="Spent" fill="#ef4444" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardBody>
+      </Card>
 
       {showExhibitionForm && (
         <Card>
