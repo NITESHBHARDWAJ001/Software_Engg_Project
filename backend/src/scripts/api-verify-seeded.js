@@ -164,6 +164,25 @@ const main = async () => {
       const stats = await request({ name: 'exhibitions stats', method: 'GET', path: '/api/v1/exhibitions/stats', token: orgToken });
       expect(typeof stats.data.totalExhibitions === 'number', 'Exhibitions stats should include totalExhibitions');
     });
+
+    await run('Notifications APIs', async () => {
+      const unread = await request({
+        name: 'notifications unread',
+        method: 'GET',
+        path: '/api/v1/notifications?read=false',
+        token: orgToken,
+      });
+      expect(Array.isArray(unread.data), 'Unread notifications should be an array');
+      expect(unread.data.length > 0, 'Unread notifications should not be empty');
+
+      const all = await request({
+        name: 'notifications all',
+        method: 'GET',
+        path: '/api/v1/notifications',
+        token: orgToken,
+      });
+      expect(Array.isArray(all.data), 'Notifications list should be an array');
+    });
   } finally {
     console.log('');
     console.log('========== Seeded API Verification ==========' );
