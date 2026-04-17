@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FiMapPin, FiCalendar, FiRefreshCw, FiArrowRight } from 'react-icons/fi';
+import { FiMapPin, FiCalendar, FiArrowRight } from 'react-icons/fi';
 
 import { Card, CardContent, CardHeader } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
