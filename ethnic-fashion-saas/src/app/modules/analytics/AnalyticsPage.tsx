@@ -113,7 +113,7 @@ const AnalyticsPage: React.FC = () => {
     setIsScraping(true);
     try {
       const organizationId = currentOrganization?.id ?? 'org-1';
-      await analyticsService.triggerScrape(scrapeUrl, organizationId);
+      await analyticsService.triggerScrape(scrapeUrl);
       const report = await analyticsService.getAiReport(organizationId);
       setAiReport(report);
       setScrapeUrl('');

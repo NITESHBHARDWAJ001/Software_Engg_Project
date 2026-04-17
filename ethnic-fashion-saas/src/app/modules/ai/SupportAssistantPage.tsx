@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FiMessageCircle, FiHelpCircle, FiCornerDownRight, FiAlertCircle, FiFileText, FiTag } from 'react-icons/fi';
+import { FiHelpCircle, FiCornerDownRight, FiAlertCircle, FiFileText, FiTag } from 'react-icons/fi';
 
 import { Card, CardContent, CardHeader } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';

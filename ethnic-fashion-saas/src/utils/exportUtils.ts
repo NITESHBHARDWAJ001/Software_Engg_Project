@@ -148,7 +148,7 @@ export const exportToPDF = async (
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        onclone: (doc) => {
+        onclone: (doc: Document) => {
           const body = doc.body;
           if (body) {
             body.style.background = '#ffffff';
