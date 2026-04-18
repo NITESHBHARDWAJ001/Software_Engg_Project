@@ -82,9 +82,40 @@ Customer entities are returned directly from Prisma model.
         "id": "bd9c0a5d-0f8f-4216-b33e-88f79c29667e",
         "name": "Shreya Fabrics",
         "totalSpent": 61210,
-        "lifetimeValue": 69200
+        "lifetimeValue": 69200,
+        "rfmScore": 14,
+        "rfmSegment": "LOYAL"
       }
-    ]
+    ],
+    "rfmSummary": {
+      "customerCount": 145,
+      "averageRecencyDays": 17.3,
+      "averageFrequency": 4.6,
+      "averageMonetary": 2337.5,
+      "segments": {
+        "CHAMPION": 18,
+        "LOYAL": 32,
+        "POTENTIAL_LOYALIST": 45,
+        "NEW_CUSTOMER": 21,
+        "AT_RISK": 14,
+        "NEEDS_ATTENTION": 15
+      }
+    }
+  }
+}
+```
+
+### Customer Activation/Deactivation (`PATCH /api/v1/customers/:id/status`)
+
+```json
+{
+  "success": true,
+  "message": "Customer activated",
+  "data": {
+    "id": "f157f8de-9c44-4c89-b6f5-6f1909157f58",
+    "isArchived": false,
+    "updatedBy": "6e903c8b-c2be-4dc0-9771-ab6f6f9771f6",
+    "updatedAt": "2026-04-18T11:45:00.000Z"
   }
 }
 ```
@@ -132,6 +163,32 @@ Inventory item responses are Prisma entities with stock status and monetary fiel
     "categoriesCount": 8,
     "recentTransactions": 21,
     "averageUnitPrice": 433.25
+  }
+}
+```
+
+### Inventory Movements (`GET /api/v1/inventory/movements`)
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "0b08ab30-fac8-4b80-8f2b-8805f8984f5f",
+      "inventoryItemId": "ce06dc69-7cb0-4a5a-b0d4-b6755fe2e756",
+      "itemName": "Handloom Kurta",
+      "itemSku": "KURTA-HL-001",
+      "quantity": -2,
+      "changeType": "OUT",
+      "note": "Sold at exhibition",
+      "createdAt": "2026-04-18T09:10:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
   }
 }
 ```
@@ -485,6 +542,146 @@ Task resource is mapped by service and returns derived user names.
   "data": {
     "featureKey": "FINANCE_MANAGEMENT",
     "hasAccess": false
+  }
+}
+```
+
+## Employees
+
+### Employee Resource (`GET /api/v1/employees`)
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "d5abf5a1-90a7-4ddf-8c6d-759a60960dc7",
+      "organizationId": "5fa37038-5f2f-429d-bec7-2d36f6357aa0",
+      "email": "staff1@org.com",
+      "firstName": "Priya",
+      "lastName": "Singh",
+      "role": "STAFF",
+      "isActive": true,
+      "employeeProfile": {
+        "employmentType": "FULL_TIME",
+        "department": "Sales"
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+### Employee Module Access (`GET /api/v1/employees/:id/module-access`)
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "employeeId": "d5abf5a1-90a7-4ddf-8c6d-759a60960dc7",
+    "role": "STAFF",
+    "moduleAccessPolicies": {
+      "EXHIBITION_MANAGEMENT": {
+        "allowed": true,
+        "updatedAt": "2026-04-18T10:10:00.000Z"
+      }
+    }
+  }
+}
+```
+
+## Notifications
+
+### Notification List (`GET /api/v1/notifications`)
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": [
+    {
+      "id": "4a22fcbb-c80e-4a07-8d74-c5ff2da282f9",
+      "userId": "d5abf5a1-90a7-4ddf-8c6d-759a60960dc7",
+      "title": "Exhibition Follow-up",
+      "message": "Lead requires follow-up within 24 hours",
+      "type": "INFO",
+      "read": false,
+      "link": "/exhibitions/4f7af63f-4727-42f2-b52b-8dbd54ecf8d8",
+      "createdAt": "2026-04-18T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Mark All Read (`PATCH /api/v1/notifications/read-all`)
+
+```json
+{
+  "success": true,
+  "message": "Notifications marked as read",
+  "data": {
+    "updatedCount": 5
+  }
+}
+```
+
+## Analytics
+
+### Competitors Summary (`GET /api/v1/analytics/dashboard/competitors`)
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "totalCompetitors": 12,
+    "activeCompetitors": 11,
+    "averagePriceDelta": 4.2
+  }
+}
+```
+
+### AI Report (`POST /api/v1/analytics/report`)
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "summary": "Top categories this week are sarees and kurtas.",
+    "insights": [
+      "Price sensitivity increased in urban segment",
+      "Footfall prediction is favorable for next weekend"
+    ]
+  }
+}
+```
+
+## Organization Bootstrap
+
+### Create Organization (`POST /api/v1/organizations`)
+
+```json
+{
+  "success": true,
+  "message": "Organization created successfully",
+  "data": {
+    "organization": {
+      "id": "5fa37038-5f2f-429d-bec7-2d36f6357aa0",
+      "name": "Nitesh Ethnic",
+      "slug": "nitesh-ethnic"
+    },
+    "adminUser": {
+      "id": "6e903c8b-c2be-4dc0-9771-ab6f6f9771f6",
+      "email": "admin@org.com",
+      "role": "ORG_ADMIN"
+    }
   }
 }
 ```

@@ -1,11 +1,12 @@
 openapi: 3.0.3
 info:
   title: Ethnic Fashion SaaS Backend API
-  version: 1.0.0
-  description: Multi-tenant backend API with JWT auth, RBAC, and subscription feature controls.
+  version: 1.1.0
+  description: Complete API contract for backend routes under /api/v1.
 servers:
   - url: http://localhost:4000
     description: Local
+
 tags:
   - name: Health
   - name: Auth
@@ -15,7 +16,11 @@ tags:
   - name: Finance
   - name: Tasks
   - name: Exhibitions
+  - name: Employees
+  - name: Notifications
   - name: Subscriptions
+  - name: Analytics
+
 components:
   securitySchemes:
     bearerAuth:
@@ -32,10 +37,10 @@ components:
         message:
           type: string
           example: ok
-        data: {}
+        data:
+          nullable: true
       required:
         - success
-        - data
     PagedResponse:
       type: object
       properties:
@@ -44,7 +49,9 @@ components:
           example: true
         data:
           type: array
-          items: {}
+          items:
+            type: object
+            additionalProperties: true
         pagination:
           type: object
           properties:
@@ -56,10 +63,10 @@ components:
               example: 20
             total:
               type: integer
-              example: 145
+              example: 42
             totalPages:
               type: integer
-              example: 8
+              example: 3
           required:
             - page
             - pageSize
@@ -102,39 +109,58 @@ components:
       properties:
         refreshToken:
           type: string
-          minLength: 20
       required:
         - refreshToken
+    RegisterRequest:
+      type: object
+      properties:
+        organizationName:
+          type: string
+        adminName:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+      required:
+        - organizationName
+        - adminName
+        - email
+        - password
     CustomerCreate:
       type: object
       properties:
         name:
           type: string
-          minLength: 2
         email:
           type: string
           format: email
         phone:
           type: string
-          minLength: 5
         city:
           type: string
         country:
           type: string
       required:
         - name
+    CustomerStatusUpdate:
+      type: object
+      properties:
+        isArchived:
+          type: boolean
+      required:
+        - isArchived
     InventoryCreate:
       type: object
       properties:
         name:
           type: string
-          minLength: 2
         sku:
           type: string
-          minLength: 2
         category:
           type: string
-          minLength: 2
         currentStock:
           type: integer
           minimum: 0
@@ -152,7 +178,6 @@ components:
           minimum: 0
         unit:
           type: string
-          default: piece
       required:
         - name
         - sku
@@ -166,1112 +191,1205 @@ components:
           type: integer
         changeType:
           type: string
-          enum:
-            - IN
-            - OUT
-            - ADJUSTMENT
+          enum: [IN, OUT, ADJUSTMENT]
         note:
           type: string
       required:
         - quantity
         - changeType
-    InvoiceCreate:
+    NotificationCreate:
       type: object
       properties:
-        invoiceNumber:
+        userId:
           type: string
-          minLength: 2
-        issueDate:
-          type: string
-          format: date
-        dueDate:
-          type: string
-          format: date
-        currency:
-          type: string
-          minLength: 3
-          maxLength: 3
-        subtotal:
-          type: number
-          minimum: 0
-        taxAmount:
-          type: number
-          minimum: 0
-        discountAmount:
-          type: number
-          minimum: 0
-        totalAmount:
-          type: number
-          minimum: 0
-        notes:
-          type: string
-          maxLength: 2000
-      required:
-        - invoiceNumber
-        - issueDate
-        - subtotal
-        - totalAmount
-    TaskCreate:
-      type: object
-      properties:
         title:
           type: string
-          minLength: 2
-        description:
+        message:
           type: string
-        status:
+        type:
           type: string
-          enum:
-            - TODO
-            - IN_PROGRESS
-            - REVIEW
-            - COMPLETED
-            - CANCELLED
-        priority:
-          type: string
-          enum:
-            - LOW
-            - MEDIUM
-            - HIGH
-            - URGENT
-        assignedTo:
-          type: string
-        dueDate:
-          type: string
-          format: date
-        tags:
-          type: array
-          items:
-            type: string
-        attachments:
-          type: array
-          items:
-            type: string
-        relatedExhibitionId:
-          type: string
-        relatedCustomerId:
+        link:
           type: string
       required:
+        - userId
         - title
-    ExhibitionCreate:
+        - message
+        - type
+    GenericObject:
       type: object
-      properties:
-        name:
-          type: string
-          minLength: 2
-        description:
-          type: string
-        location:
-          type: string
-          minLength: 2
-        startDate:
-          type: string
-          format: date
-        endDate:
-          type: string
-          format: date
-        status:
-          type: string
-          enum:
-            - UPCOMING
-            - ACTIVE
-            - COMPLETED
-            - CANCELLED
-        budget:
-          type: number
-          minimum: 0
-        actualSpent:
-          type: number
-          minimum: 0
-        expectedRevenue:
-          type: number
-          minimum: 0
-        actualRevenue:
-          type: number
-          minimum: 0
-        expectedFootfall:
-          type: integer
-          minimum: 0
-        actualFootfall:
-          type: integer
-          minimum: 0
-        boothSize:
-          type: string
-        stallNumber:
-          type: string
-        category:
-          type: string
-        assignedStaff:
-          type: array
-          items:
-            type: string
-        notes:
-          type: string
-        images:
-          type: array
-          items:
-            type: string
-      required:
-        - name
-        - location
-        - startDate
-        - endDate
-    PlanCreate:
-      type: object
-      properties:
-        name:
-          type: string
-          minLength: 2
-        code:
-          type: string
-          minLength: 2
-          maxLength: 50
-        description:
-          type: string
-          maxLength: 2000
-        billingCycle:
-          type: string
-          enum:
-            - MONTHLY
-            - QUARTERLY
-            - YEARLY
-        price:
-          type: number
-          minimum: 0
-        currency:
-          type: string
-          minLength: 3
-          maxLength: 3
-        isActive:
-          type: boolean
-        features:
-          type: array
-          items:
-            type: string
-        limits:
-          type: object
-          additionalProperties: true
-      required:
-        - name
-        - code
-        - billingCycle
-        - price
+      additionalProperties: true
+
 paths:
   /health/live:
     get:
-      tags:
-        - Health
+      tags: [Health]
       summary: Liveness check
       responses:
-        "200":
+        '200':
           description: Service is alive
+
   /health/ready:
     get:
-      tags:
-        - Health
+      tags: [Health]
       summary: Readiness check
       responses:
-        "200":
+        '200':
           description: Service is ready
+
   /api/v1/auth/login:
     post:
-      tags:
-        - Auth
+      tags: [Auth]
       summary: Login with email/password
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LoginRequest"
+              $ref: '#/components/schemas/LoginRequest'
       responses:
-        "200":
+        '200':
           description: Login successful
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OkResponse"
-        "400":
-          description: Validation failed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/OkResponse'
+
   /api/v1/auth/refresh:
     post:
-      tags:
-        - Auth
-      summary: Rotate refresh token
+      tags: [Auth]
+      summary: Refresh access token
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RefreshRequest"
+              $ref: '#/components/schemas/RefreshRequest'
       responses:
-        "200":
+        '200':
           description: Token refreshed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OkResponse"
-        "401":
-          description: Refresh token invalid/revoked
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/auth/logout:
     post:
-      tags:
-        - Auth
-      summary: Revoke refresh token session
+      tags: [Auth]
+      summary: Logout and revoke refresh token
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RefreshRequest"
+              $ref: '#/components/schemas/RefreshRequest'
       responses:
-        "200":
+        '200':
           description: Logged out
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new organization and org admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Organization registered
+
+  /api/v1/organizations:
+    get:
+      tags: [Organizations]
+      summary: List organizations (super admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Paginated organizations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedResponse'
+    post:
+      tags: [Organizations]
+      summary: Create organization (super admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '201':
+          description: Organization created
+
   /api/v1/organizations/me:
     get:
-      tags:
-        - Organizations
+      tags: [Organizations]
       summary: Get current organization profile
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
           description: Organization profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OkResponse"
+
   /api/v1/customers:
     get:
-      tags:
-        - Customers
+      tags: [Customers]
       summary: List customers
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: page
-          in: query
-          schema:
-            type: integer
-            default: 1
-        - name: pageSize
-          in: query
-          schema:
-            type: integer
-            default: 20
-        - name: search
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum:
-              - ACTIVE
-              - INACTIVE
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Paged list
+        '200':
+          description: Paginated customers
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PagedResponse"
+                $ref: '#/components/schemas/PagedResponse'
     post:
-      tags:
-        - Customers
+      tags: [Customers]
       summary: Create customer
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CustomerCreate"
+              $ref: '#/components/schemas/CustomerCreate'
       responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OkResponse"
+        '201':
+          description: Customer created
+
   /api/v1/customers/stats:
     get:
-      tags:
-        - Customers
-      summary: Customer analytics overview
-      security:
-        - bearerAuth: []
+      tags: [Customers]
+      summary: Get customer dashboard stats (includes RFM summary)
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
           description: Customer stats
+
   /api/v1/customers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Customers
-      summary: Get customer by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Customers]
+      summary: Get customer by id
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Customer found
+        '200':
+          description: Customer
     patch:
-      tags:
-        - Customers
+      tags: [Customers]
       summary: Update customer
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CustomerCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
+        '200':
           description: Customer updated
     delete:
-      tags:
-        - Customers
-      summary: Archive customer
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Customers]
+      summary: Deactivate customer (archive)
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Customer archived
+        '200':
+          description: Customer deactivated
+
+  /api/v1/customers/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [Customers]
+      summary: Set customer active/inactive state
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerStatusUpdate'
+      responses:
+        '200':
+          description: Customer status updated
+
   /api/v1/inventory:
     get:
-      tags:
-        - Inventory
-      summary: List inventory items
-      security:
-        - bearerAuth: []
+      tags: [Inventory]
+      summary: List inventory
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Paged inventory list
+        '200':
+          description: Paginated inventory list
     post:
-      tags:
-        - Inventory
+      tags: [Inventory]
       summary: Create inventory item
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InventoryCreate"
+              $ref: '#/components/schemas/InventoryCreate'
       responses:
-        "201":
-          description: Inventory item created
+        '201':
+          description: Item created
+
   /api/v1/inventory/stats:
     get:
-      tags:
-        - Inventory
-      summary: Inventory stats
-      security:
-        - bearerAuth: []
+      tags: [Inventory]
+      summary: Get inventory stats
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Stats
+        '200':
+          description: Inventory stats
+
+  /api/v1/inventory/movements:
+    get:
+      tags: [Inventory]
+      summary: List inventory movement events
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Paginated movement list
+
+  /api/v1/inventory/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Inventory]
+      summary: Get inventory item by id
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Inventory item
+    patch:
+      tags: [Inventory]
+      summary: Update inventory item
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Inventory item updated
+
+  /api/v1/inventory/{id}/adjust-stock:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Inventory]
+      summary: Adjust stock quantity
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+      responses:
+        '200':
+          description: Stock adjusted
+
   /api/v1/inventory/alerts/low-stock:
     get:
-      tags:
-        - Inventory
-      summary: Low-stock alerts
-      security:
-        - bearerAuth: []
+      tags: [Inventory]
+      summary: Get low-stock alerts
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Alert list
+        '200':
+          description: Low stock list
+
   /api/v1/inventory/analytics/categories:
     get:
-      tags:
-        - Inventory
-      summary: Category analytics
-      security:
-        - bearerAuth: []
+      tags: [Inventory]
+      summary: Get inventory category analytics
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Category metrics
-  /api/v1/inventory/{id}:
-    get:
-      tags:
-        - Inventory
-      summary: Get inventory item by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Item found
-    patch:
-      tags:
-        - Inventory
-      summary: Update inventory item
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/InventoryCreate"
-      responses:
-        "200":
-          description: Updated
-  /api/v1/inventory/{id}/adjust-stock:
-    post:
-      tags:
-        - Inventory
-      summary: Adjust stock quantity
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StockAdjustment"
-      responses:
-        "200":
-          description: Stock updated
+        '200':
+          description: Category analytics
+
   /api/v1/inventory/{id}/movements:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Inventory
-      summary: Inventory movement history
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Inventory]
+      summary: Get movement history for an item
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Movement list
+        '200':
+          description: Movement history
+
   /api/v1/finance/invoices:
     get:
-      tags:
-        - Finance
+      tags: [Finance]
       summary: List invoices
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Paged invoices
+        '200':
+          description: Paginated invoices
     post:
-      tags:
-        - Finance
+      tags: [Finance]
       summary: Create invoice
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InvoiceCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
+        '201':
           description: Invoice created
+
   /api/v1/finance/invoices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Finance
-      summary: Get invoice by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Finance]
+      summary: Get invoice by id
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Invoice
+        '200':
+          description: Invoice resource
     patch:
-      tags:
-        - Finance
+      tags: [Finance]
       summary: Update invoice
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InvoiceCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
-          description: Updated
+        '200':
+          description: Invoice updated
+
   /api/v1/finance/invoices/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     patch:
-      tags:
-        - Finance
+      tags: [Finance]
       summary: Update invoice status
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
-          description: Status updated
+        '200':
+          description: Invoice status updated
+
   /api/v1/finance/ledger:
     get:
-      tags:
-        - Finance
+      tags: [Finance]
       summary: List ledger entries
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Paged ledger entries
+        '200':
+          description: Paginated ledger list
     post:
-      tags:
-        - Finance
+      tags: [Finance]
       summary: Create ledger entry
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
+        '201':
           description: Ledger entry created
+
   /api/v1/finance/analytics/cash-flow:
     get:
-      tags:
-        - Finance
-      summary: Cash-flow summary
-      security:
-        - bearerAuth: []
+      tags: [Finance]
+      summary: Get cash-flow metrics
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Cash-flow
+        '200':
+          description: Cash-flow data
+
   /api/v1/finance/analytics/trends:
     get:
-      tags:
-        - Finance
-      summary: Revenue/expense trends
-      security:
-        - bearerAuth: []
+      tags: [Finance]
+      summary: Get finance trend series
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Trends
+        '200':
+          description: Trend data
+
   /api/v1/finance/analytics/stats:
     get:
-      tags:
-        - Finance
-      summary: Finance stats
-      security:
-        - bearerAuth: []
+      tags: [Finance]
+      summary: Get finance KPI stats
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Finance KPIs
+        '200':
+          description: Finance stats
+
   /api/v1/tasks:
     get:
-      tags:
-        - Tasks
+      tags: [Tasks]
       summary: List tasks
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Paged tasks
+        '200':
+          description: Paginated tasks
     post:
-      tags:
-        - Tasks
+      tags: [Tasks]
       summary: Create task
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TaskCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
+        '201':
           description: Task created
+
   /api/v1/tasks/stats:
     get:
-      tags:
-        - Tasks
-      summary: Task stats
-      security:
-        - bearerAuth: []
+      tags: [Tasks]
+      summary: Get task stats
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Task KPIs
+        '200':
+          description: Task summary
+
   /api/v1/tasks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Tasks
-      summary: Get task by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Tasks]
+      summary: Get task by id
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Task
+        '200':
+          description: Task resource
     patch:
-      tags:
-        - Tasks
+      tags: [Tasks]
       summary: Update task
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TaskCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
+        '200':
           description: Task updated
     delete:
-      tags:
-        - Tasks
+      tags: [Tasks]
       summary: Delete task
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
           description: Task deleted
+
   /api/v1/tasks/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     patch:
-      tags:
-        - Tasks
+      tags: [Tasks]
       summary: Update task status
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
-          description: Status updated
+        '200':
+          description: Task status updated
+
   /api/v1/tasks/{id}/comments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Tasks
+      tags: [Tasks]
       summary: List task comments
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Comment list
+        '200':
+          description: Task comments
     post:
-      tags:
-        - Tasks
+      tags: [Tasks]
       summary: Add task comment
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
-          description: Comment added
+        '201':
+          description: Comment created
+
   /api/v1/exhibitions:
     get:
-      tags:
-        - Exhibitions
+      tags: [Exhibitions]
       summary: List exhibitions
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Paged exhibitions
+        '200':
+          description: Paginated exhibitions
     post:
-      tags:
-        - Exhibitions
+      tags: [Exhibitions]
       summary: Create exhibition
-      security:
-        - bearerAuth: []
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ExhibitionCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
+        '201':
           description: Exhibition created
+
   /api/v1/exhibitions/stats:
     get:
-      tags:
-        - Exhibitions
-      summary: Exhibition stats
-      security:
-        - bearerAuth: []
+      tags: [Exhibitions]
+      summary: Get exhibition stats
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Exhibition KPIs
+        '200':
+          description: Exhibition stats
+
   /api/v1/exhibitions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Exhibitions
-      summary: Get exhibition by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Exhibitions]
+      summary: Get exhibition by id
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Exhibition
+        '200':
+          description: Exhibition details
     patch:
-      tags:
-        - Exhibitions
+      tags: [Exhibitions]
       summary: Update exhibition
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ExhibitionCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
-          description: Updated
+        '200':
+          description: Exhibition updated
+
   /api/v1/exhibitions/{id}/leads:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Exhibitions
+      tags: [Exhibitions]
       summary: List exhibition leads
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Lead list
+        '200':
+          description: Leads list
     post:
-      tags:
-        - Exhibitions
+      tags: [Exhibitions]
       summary: Create exhibition lead
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
+        '201':
           description: Lead created
+
   /api/v1/exhibitions/{id}/leads/{leadId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: leadId
+        in: path
+        required: true
+        schema:
+          type: string
     patch:
-      tags:
-        - Exhibitions
+      tags: [Exhibitions]
       summary: Update exhibition lead
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: leadId
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
+        '200':
           description: Lead updated
+
   /api/v1/exhibitions/leads/{leadId}/interactions:
+    parameters:
+      - name: leadId
+        in: path
+        required: true
+        schema:
+          type: string
     post:
-      tags:
-        - Exhibitions
-      summary: Add lead interaction
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: leadId
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Exhibitions]
+      summary: Add interaction to exhibition lead
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
-          description: Interaction added
+        '201':
+          description: Interaction created
+
   /api/v1/exhibitions/{id}/roi:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Exhibitions
-      summary: Get exhibition ROI
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Exhibitions]
+      summary: Get exhibition ROI metrics
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: ROI summary
+        '200':
+          description: ROI metrics
+
+  /api/v1/employees:
+    get:
+      tags: [Employees]
+      summary: List employees
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Paginated employees
+    post:
+      tags: [Employees]
+      summary: Create employee
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '201':
+          description: Employee created
+
+  /api/v1/employees/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [Employees]
+      summary: Update employee
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Employee updated
+
+  /api/v1/employees/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [Employees]
+      summary: Activate/deactivate employee
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Employee status updated
+
+  /api/v1/employees/{id}/module-access:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Employees]
+      summary: Get employee module access policies
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Module access policy
+    patch:
+      tags: [Employees]
+      summary: Update employee module access policies
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Module access updated
+
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications for current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Notifications list
+    post:
+      tags: [Notifications]
+      summary: Create notification
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationCreate'
+      responses:
+        '201':
+          description: Notification created
+
+  /api/v1/notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Notifications updated
+
+  /api/v1/notifications/{id}/read:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [Notifications]
+      summary: Mark notification as read
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Notification updated
+
+  /api/v1/notifications/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags: [Notifications]
+      summary: Delete notification
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Notification deleted
+
   /api/v1/subscriptions/plans:
     get:
-      tags:
-        - Subscriptions
+      tags: [Subscriptions]
       summary: List subscription plans
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: activeOnly
-          in: query
-          schema:
-            type: boolean
-            default: false
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Plan list
+        '200':
+          description: Paginated plans
     post:
-      tags:
-        - Subscriptions
-      summary: Create subscription plan (SUPER_ADMIN)
-      security:
-        - bearerAuth: []
+      tags: [Subscriptions]
+      summary: Create subscription plan
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PlanCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
+        '201':
           description: Plan created
+
   /api/v1/subscriptions/plans/{planId}:
+    parameters:
+      - name: planId
+        in: path
+        required: true
+        schema:
+          type: string
     patch:
-      tags:
-        - Subscriptions
+      tags: [Subscriptions]
       summary: Update subscription plan
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: planId
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PlanCreate"
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
+        '200':
           description: Plan updated
     delete:
-      tags:
-        - Subscriptions
+      tags: [Subscriptions]
       summary: Deactivate subscription plan
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: planId
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
           description: Plan deactivated
-  /api/v1/subscriptions/organizations/{organizationId}/current:
+
+  /api/v1/subscriptions/plans/{planId}/organizations:
+    parameters:
+      - name: planId
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Subscriptions
-      summary: Get organization current subscription
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Subscriptions]
+      summary: List organizations on a plan
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
+          description: Paginated organizations
+
+  /api/v1/subscriptions/organizations/{organizationId}/current:
+    parameters:
+      - name: organizationId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Subscriptions]
+      summary: Get current organization subscription
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
           description: Current subscription
     put:
-      tags:
-        - Subscriptions
+      tags: [Subscriptions]
       summary: Assign plan to organization
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "201":
-          description: Assigned
+        '201':
+          description: Subscription assigned
     patch:
-      tags:
-        - Subscriptions
-      summary: Update organization current subscription
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Subscriptions]
+      summary: Update organization subscription
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
       responses:
-        "200":
-          description: Updated
+        '200':
+          description: Subscription updated
+
   /api/v1/subscriptions/organizations/{organizationId}/current/cancel:
+    parameters:
+      - name: organizationId
+        in: path
+        required: true
+        schema:
+          type: string
     post:
-      tags:
-        - Subscriptions
-      summary: Cancel organization current subscription
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Subscriptions]
+      summary: Cancel organization subscription
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
-          description: Canceled
+        '200':
+          description: Subscription canceled
+
   /api/v1/subscriptions/me/current:
     get:
-      tags:
-        - Subscriptions
-      summary: Get current organization subscription for current user
-      security:
-        - bearerAuth: []
+      tags: [Subscriptions]
+      summary: Get current subscription for authenticated organization
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
           description: Current subscription
+
   /api/v1/subscriptions/me/features/{featureKey}:
+    parameters:
+      - name: featureKey
+        in: path
+        required: true
+        schema:
+          type: string
     get:
-      tags:
-        - Subscriptions
-      summary: Check current organization feature access
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: featureKey
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Subscriptions]
+      summary: Check feature access for current organization
+      security: [{ bearerAuth: [] }]
       responses:
-        "200":
+        '200':
           description: Feature access result
+
+  /api/v1/subscriptions/mock-checkout:
+    post:
+      tags: [Subscriptions]
+      summary: Mock checkout and activate plan
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '201':
+          description: Mock checkout completed
+
+  /api/v1/subscriptions/me/modules/{moduleKey}/access:
+    parameters:
+      - name: moduleKey
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Subscriptions]
+      summary: Check module access policy for current user role
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Module access policy
+
+  /api/v1/subscriptions/me/modules/access:
+    put:
+      tags: [Subscriptions]
+      summary: Update organization module access policies
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Module access policies updated
+
+  /api/v1/analytics/scrape:
+    post:
+      tags: [Analytics]
+      summary: Trigger competitor scraping job
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Scrape triggered
+
+  /api/v1/analytics/report:
+    post:
+      tags: [Analytics]
+      summary: Generate AI report from analytics context
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: AI report generated
+
+  /api/v1/analytics/generate-ad:
+    post:
+      tags: [Analytics]
+      summary: Generate ad copy from analytics context
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Ad copy generated
+
+  /api/v1/analytics/stock-context/sync:
+    post:
+      tags: [Analytics]
+      summary: Sync stock context to analytics service
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Stock context sync completed
+
+  /api/v1/analytics/stock-context/manual-check:
+    get:
+      tags: [Analytics]
+      summary: Get manual stock context check result
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Stock context check result
+
+  /api/v1/analytics/dashboard/competitors:
+    get:
+      tags: [Analytics]
+      summary: Get competitor dashboard summary
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Competitor summary
+
+  /api/v1/analytics/dashboard/competitors/{competitorId}:
+    parameters:
+      - name: competitorId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Analytics]
+      summary: Get detailed competitor dashboard info
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Competitor detail
+
+  /api/v1/analytics/dashboard/pricing-trends:
+    get:
+      tags: [Analytics]
+      summary: Get pricing trend analytics
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Pricing trends
+
+  /api/v1/analytics/dashboard/sentiment:
+    get:
+      tags: [Analytics]
+      summary: Get sentiment breakdown
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Sentiment metrics
+
+  /api/v1/analytics/dashboard/insights:
+    get:
+      tags: [Analytics]
+      summary: Get top insights list
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Insights list
+
+  /api/v1/analytics/dashboard/products:
+    get:
+      tags: [Analytics]
+      summary: Get products by category summary
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Products/category summary

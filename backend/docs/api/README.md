@@ -2,6 +2,21 @@
 
 This folder contains production-oriented API documentation for the Ethnic Fashion SaaS backend.
 
+Covered modules:
+
+- Health
+- Auth
+- Organizations
+- Customers
+- Inventory
+- Finance
+- Tasks
+- Exhibitions
+- Employees
+- Notifications
+- Subscriptions
+- Analytics
+
 ## Audience
 
 - Frontend developers integrating the APIs
@@ -167,6 +182,12 @@ Auth routes are rate limited:
 When changing request/response contracts:
 
 1. Update route/schema/service.
-2. Update this documentation folder in same PR.
+2. Update this documentation folder in same PR, including `endpoints.md`, `responses.md`, `errors.md`, and `swagger.yml`.
 3. Re-run integration checks (`npm run test:api`, `npm run verify:api`, `npm run verify:security`).
 4. Call out contract changes in release notes.
+
+## Source of Truth
+
+- Route list: `src/modules/**/*.routes.js`
+- Runtime OpenAPI feed: `/api-docs`, `/api-docs.json`, `/api-docs.yaml`
+- Authoring file: `docs/api/swagger.yml`
