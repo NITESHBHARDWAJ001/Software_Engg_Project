@@ -119,6 +119,35 @@ export const mockAnalyticsService = {
     const chunk = mockProducts.slice(start, start + limit);
     return { data: chunk, pagination: { pages: Math.ceil(mockProducts.length / limit) } };
   },
+
+  async analyzeReelSentiment(reelUrl: string, comments: string[] = [], orgId: string = 'test-org') {
+    await delay(250);
+    const totals = comments.reduce(
+      (acc, c) => {
+        const t = c.toLowerCase();
+        if (/(love|great|awesome|beautiful|nice|amazing)/.test(t)) acc.Positive += 1;
+        else if (/(bad|poor|hate|expensive|worse|worst)/.test(t)) acc.Negative += 1;
+        else acc.Neutral += 1;
+        return acc;
+      },
+      { Positive: 0, Neutral: 0, Negative: 0 },
+    );
+
+    return {
+      status: 'success',
+      data: {
+        org_id: orgId,
+        reel_url: reelUrl,
+        comments_analyzed: comments.length,
+        sentiment_counts: totals,
+        sentiment_percentages: {
+          positive: comments.length ? (totals.Positive / comments.length) * 100 : 0,
+          neutral: comments.length ? (totals.Neutral / comments.length) * 100 : 0,
+          negative: comments.length ? (totals.Negative / comments.length) * 100 : 0,
+        },
+      },
+    };
+  },
 };
 
 export default mockAnalyticsService;

@@ -102,6 +102,23 @@ export const getProductsByCategory = async (req, res, next) => {
   }
 };
 
+export const analyzeReelSentiment = async (req, res, next) => {
+  try {
+    const orgId = req.auth?.organizationId || req.body.org_id || 'test-org';
+    const reelUrl = req.body?.reel_url || req.body?.reelUrl;
+    const comments = Array.isArray(req.body?.comments) ? req.body.comments : [];
+
+    if (!reelUrl) {
+      throw new HttpError(400, 'reel_url is required in request body');
+    }
+
+    const result = await analyticsService.analyzeReelSentiment(orgId, reelUrl, comments);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const syncStockContext = async (req, res, next) => {
   try {
     const orgId = req.auth?.organizationId;

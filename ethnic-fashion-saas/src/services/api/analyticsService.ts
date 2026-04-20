@@ -1,7 +1,11 @@
 import { API_BASE_URL } from '../../utils/constants';
+import { useAuthStore } from '../../store/authStore';
 import mockAnalyticsService from '../mock/analyticsService';
 
 function getAuthToken(): string | null {
+  const storeToken = useAuthStore.getState().token;
+  if (storeToken) return storeToken;
+
   try {
     const raw = localStorage.getItem('auth_token');
     if (!raw) return null;
@@ -10,6 +14,20 @@ function getAuthToken(): string | null {
     return parsed?.state?.token ?? null;
   } catch {
     return localStorage.getItem('token') ?? null;
+  }
+}
+
+function getCurrentOrganizationId(explicitOrgId?: string): string {
+  if (explicitOrgId) return explicitOrgId;
+
+  try {
+    const raw = localStorage.getItem('organization-storage');
+    if (!raw) return 'test-org';
+    const parsed = JSON.parse(raw);
+    const orgId = parsed?.state?.currentOrganization?.id;
+    return typeof orgId === 'string' && orgId.trim() ? orgId : 'test-org';
+  } catch {
+    return 'test-org';
   }
 }
 
@@ -45,17 +63,19 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const realAnalyticsService = {
-  async triggerScrape(url: string) {
+  async triggerScrape(url: string, orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
     return apiRequest<any>('/v1/analytics/scrape', {
       method: 'POST',
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, org_id: scopedOrgId }),
     });
   },
 
   async getAiReport(orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
     return apiRequest<any>('/v1/analytics/report', {
       method: 'POST',
-      body: JSON.stringify({ org_id: orgId }),
+      body: JSON.stringify({ org_id: scopedOrgId }),
     });
   },
   
@@ -67,28 +87,46 @@ export const realAnalyticsService = {
   },
 
   // Dashboard endpoints
-  async getCompetitorsSummary() {
-    return apiRequest<any>('/v1/analytics/dashboard/competitors?org_id=test-org');
+  async getCompetitorsSummary(orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
+    return apiRequest<any>(`/v1/analytics/dashboard/competitors?org_id=${encodeURIComponent(scopedOrgId)}`);
   },
 
-  async getCompetitorDetails(competitorId: number) {
-    return apiRequest<any>(`/v1/analytics/dashboard/competitors/${competitorId}?org_id=test-org`);
+  async getCompetitorDetails(competitorId: number, orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
+    return apiRequest<any>(`/v1/analytics/dashboard/competitors/${competitorId}?org_id=${encodeURIComponent(scopedOrgId)}`);
   },
 
-  async getPricingTrends(days: number = 30) {
-    return apiRequest<any>(`/v1/analytics/dashboard/pricing-trends?org_id=test-org&days=${days}`);
+  async getPricingTrends(days: number = 30, orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
+    return apiRequest<any>(`/v1/analytics/dashboard/pricing-trends?org_id=${encodeURIComponent(scopedOrgId)}&days=${days}`);
   },
 
-  async getSentimentBreakdown() {
-    return apiRequest<any>('/v1/analytics/dashboard/sentiment?org_id=test-org');
+  async getSentimentBreakdown(orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
+    return apiRequest<any>(`/v1/analytics/dashboard/sentiment?org_id=${encodeURIComponent(scopedOrgId)}`);
   },
 
-  async getTopInsights(limit: number = 5) {
-    return apiRequest<any>(`/v1/analytics/dashboard/insights?org_id=test-org&limit=${limit}`);
+  async getTopInsights(limit: number = 5, orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
+    return apiRequest<any>(`/v1/analytics/dashboard/insights?org_id=${encodeURIComponent(scopedOrgId)}&limit=${limit}`);
   },
 
-  async getProductsByCategory(page: number = 1, limit: number = 20) {
-    return apiRequest<any>(`/v1/analytics/dashboard/products?org_id=test-org&page=${page}&limit=${limit}`);
+  async getProductsByCategory(page: number = 1, limit: number = 20, orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
+    return apiRequest<any>(`/v1/analytics/dashboard/products?org_id=${encodeURIComponent(scopedOrgId)}&page=${page}&limit=${limit}`);
+  },
+
+  async analyzeReelSentiment(reelUrl: string, comments: string[] = [], orgId?: string) {
+    const scopedOrgId = getCurrentOrganizationId(orgId);
+    return apiRequest<any>('/v1/analytics/sentiment/reel', {
+      method: 'POST',
+      body: JSON.stringify({
+        org_id: scopedOrgId,
+        reel_url: reelUrl,
+        comments,
+      }),
+    });
   }
 };
 

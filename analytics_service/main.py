@@ -10,7 +10,7 @@ logging.basicConfig(
 )
 
 # Fix NotImplementedError for Playwright on Windows
-if sys.platform == "win32":
+if sys.platform == "win32" and sys.version_info < (3, 14):
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from fastapi import FastAPI

@@ -6,6 +6,10 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
+
+def utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
+
 async def generate_report(db: AsyncSession, analysis_results: dict, trends: dict, org_id: str, report_format="json"):
     logger.info(f"[{org_id}] Generating full analytics report...")
     
@@ -16,12 +20,12 @@ async def generate_report(db: AsyncSession, analysis_results: dict, trends: dict
         "trends": trends,
         "ai_executive_summary": ai_summary,
         "summary": "Analytics Competitor & Trend Report",
-        "timestamp": datetime.datetime.utcnow().isoformat()
+        "timestamp": utc_now().isoformat()
     }
     
     report = TrendReport(
         org_id=org_id,
-        generated_at=datetime.datetime.utcnow(),
+        generated_at=utc_now(),
         report_data=report_data
     )
     db.add(report)

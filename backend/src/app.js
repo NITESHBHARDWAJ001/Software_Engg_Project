@@ -3,8 +3,10 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import path from 'path';
 import { pinoHttp } from 'pino-http';
 import swaggerUi from 'swagger-ui-express';
+import { fileURLToPath } from 'url';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { getOpenApiSpec, getOpenApiSpecRaw } from './docs/openapi.js';
@@ -27,6 +29,10 @@ import { errorHandler } from './shared/middleware/errorHandler.js';
 
 export const app = express();
 app.set('trust proxy', 1);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const reelsStaticPath = path.resolve(__dirname, '../../ethnic-fashion-saas/public/reels');
 
 const normalizeOrigin = (value) => value.replace(/\/+$/, '');
 const allowedOrigins = env.CORS_ORIGIN.split(',')
@@ -56,6 +62,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(requestContext);
 app.use(pinoHttp({ logger }));
+app.use('/reels', express.static(reelsStaticPath));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

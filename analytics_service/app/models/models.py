@@ -3,6 +3,10 @@ from sqlalchemy.orm import relationship
 import datetime
 from app.db.database import Base
 
+
+def utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
+
 class Organization(Base):
     __tablename__ = "organizations"
     org_id = Column(String, primary_key=True, index=True)
@@ -10,8 +14,8 @@ class Organization(Base):
     slug = Column(String, unique=True, index=True, nullable=True)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 class StockContextEntry(Base):
     __tablename__ = "stock_context_entries"
@@ -23,7 +27,7 @@ class StockContextEntry(Base):
     category = Column(String, index=True)
     current_stock = Column(Integer, default=0)
     note = Column(Text, nullable=True)
-    captured_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    captured_at = Column(DateTime, default=utc_now, index=True)
 
 class Competitor(Base):
     __tablename__ = "competitors"
@@ -52,7 +56,7 @@ class ProductPriceHistory(Base):
     product_id = Column(Integer, ForeignKey("products.id"))
     price = Column(Float)
     currency = Column(String, default="USD")
-    recorded_at = Column(DateTime, default=datetime.datetime.utcnow)
+    recorded_at = Column(DateTime, default=utc_now)
     
     product = relationship("Product", back_populates="price_history")
 
@@ -60,7 +64,7 @@ class TrendReport(Base):
     __tablename__ = "trend_reports"
     id = Column(Integer, primary_key=True, index=True)
     org_id = Column(String, index=True)
-    generated_at = Column(DateTime, default=datetime.datetime.utcnow)
+    generated_at = Column(DateTime, default=utc_now)
     report_data = Column(JSON)
 
 class SocialPostSentiment(Base):
@@ -71,6 +75,6 @@ class SocialPostSentiment(Base):
     content_text = Column(Text)
     sentiment_score = Column(Float)
     sentiment_label = Column(String)
-    analyzed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    analyzed_at = Column(DateTime, default=utc_now)
     
     competitor = relationship("Competitor", back_populates="social_posts")

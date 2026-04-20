@@ -10,6 +10,10 @@ from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
+
+def utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
+
 def _scrape_sync(url: str):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -282,7 +286,7 @@ async def scrape_competitor_data(url: str, org_id: str, db: AsyncSession):
             sentiment_entry.content_text = raw_text[:1000]
             sentiment_entry.sentiment_score = sentiment_data["score"]
             sentiment_entry.sentiment_label = sentiment_data["label"]
-            sentiment_entry.analyzed_at = datetime.datetime.utcnow()
+            sentiment_entry.analyzed_at = utc_now()
         else:
             sentiment_entry = SocialPostSentiment(
                 competitor_id=competitor.id,
@@ -321,7 +325,7 @@ async def scrape_competitor_data(url: str, org_id: str, db: AsyncSession):
             product_id=product.id,
             price=pd["price"],
             currency=pd.get("currency", "USD"),
-            recorded_at=datetime.datetime.utcnow()
+            recorded_at=utc_now()
         )
         db.add(history)
         
