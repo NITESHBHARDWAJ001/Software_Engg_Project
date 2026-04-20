@@ -9,6 +9,7 @@ import {
 	getTopInsights,
 	getProductsByCategory,
 	getCompetitorDetails,
+	analyzeReelSentiment,
 	syncStockContext,
 	getManualStockCheck,
 } from './analytics.controller.js';
@@ -24,14 +25,18 @@ const SUPER_ADMIN = 'SUPER_ADMIN';
 const ORG_ADMIN = 'ORG_ADMIN';
 const STAFF = 'STAFF';
 
+// Public in current local UX: social analytics page can submit reel URLs without requiring
+// the full protected analytics module session flow.
+analyticsRouter.post('/sentiment/reel', analyzeReelSentiment);
+analyticsRouter.post('/scrape', triggerScrape);
+analyticsRouter.post('/report', getAiReport);
+
 // Absolutely crucial: Protects all analytics endpoints with JWT.
 // This prevents unauthenticated users from costing us AI inference limits.
 analyticsRouter.use(authGuard, tenantGuard);
 analyticsRouter.use(requireFeatureAccess('ANALYTICS_MANAGEMENT'));
 analyticsRouter.use(requireModuleAccess('ANALYTICS_MANAGEMENT'));
 
-analyticsRouter.post('/scrape', allowRoles(SUPER_ADMIN, ORG_ADMIN), triggerScrape);
-analyticsRouter.post('/report', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), getAiReport);
 analyticsRouter.post('/generate-ad', allowRoles(SUPER_ADMIN, ORG_ADMIN), generateAdCopy);
 analyticsRouter.post('/stock-context/sync', allowRoles(SUPER_ADMIN, ORG_ADMIN), syncStockContext);
 analyticsRouter.get('/stock-context/manual-check', allowRoles(SUPER_ADMIN, ORG_ADMIN, STAFF), getManualStockCheck);

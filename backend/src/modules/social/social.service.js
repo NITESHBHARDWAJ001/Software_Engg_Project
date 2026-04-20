@@ -230,13 +230,41 @@ const mockCompetitors = [
   },
 ];
 
+const DEFAULT_MOCK_ORG_ID = 'cce7b659-e31f-4ae7-86be-a461555ac457';
+
+const toScopedRecords = (records, organizationId) =>
+  records.map((record) => ({
+    ...record,
+    organizationId,
+  }));
+
+const getScopedReels = (organizationId) => {
+  const exact = mockReels.filter((r) => r.organizationId === organizationId);
+  if (exact.length > 0) {
+    return exact;
+  }
+
+  // Mock mode fallback: expose demo reels for any org id used by the UI.
+  return toScopedRecords(mockReels, organizationId || DEFAULT_MOCK_ORG_ID);
+};
+
+const getScopedCampaigns = (organizationId) => {
+  const exact = mockCampaigns.filter((c) => c.organizationId === organizationId);
+  if (exact.length > 0) {
+    return exact;
+  }
+
+  return toScopedRecords(mockCampaigns, organizationId || DEFAULT_MOCK_ORG_ID);
+};
+
 export const getAllReels = async (organizationId) => {
-  return mockReels.filter((r) => r.organizationId === organizationId);
+  return getScopedReels(organizationId);
 };
 
 export const getSentimentAnalysis = async (organizationId) => {
+  const reels = getScopedReels(organizationId);
   const comments = mockComments.filter((c) =>
-    mockReels.some((r) => r.organizationId === organizationId && r.id === c.reelId),
+    reels.some((r) => r.id === c.reelId),
   );
 
   const positive = comments.filter((c) => c.sentiment === 'POSITIVE').length;
@@ -263,10 +291,10 @@ export const getSentimentTrend = async () => mockSentimentTrend;
 export const getCompetitors = async (organizationId) => mockCompetitors;
 
 export const getCampaigns = async (organizationId) =>
-  mockCampaigns.filter((c) => c.organizationId === organizationId);
+  getScopedCampaigns(organizationId);
 
 export const getEngagementStats = async (organizationId) => {
-  const reels = mockReels.filter((r) => r.organizationId === organizationId);
+  const reels = getScopedReels(organizationId);
   const totalViews = reels.reduce((sum, r) => sum + r.views, 0);
   const totalLikes = reels.reduce((sum, r) => sum + r.likes, 0);
   const totalComments = reels.reduce((sum, r) => sum + r.comments, 0);

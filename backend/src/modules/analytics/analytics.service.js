@@ -115,6 +115,23 @@ export class AnalyticsService {
     if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
     return res.json();
   }
+
+  async analyzeReelSentiment(orgId, reelUrl, comments = []) {
+    logger.info({ orgId, reelUrl, commentCount: comments.length }, 'Integration: Analyzing reel sentiment');
+    const res = await fetch(`${ANALYTICS_URL}/analyze-reel-sentiment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        org_id: orgId,
+        reel_url: reelUrl,
+        comments,
+      }),
+    });
+    if (!res.ok) throw new Error(`Analytics Service Error: ${res.statusText}`);
+    return res.json();
+  }
 }
 
 export const analyticsService = new AnalyticsService();

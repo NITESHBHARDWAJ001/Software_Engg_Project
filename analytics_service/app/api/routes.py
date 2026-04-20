@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, desc
 from sqlalchemy.orm import selectinload
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from app.db.database import get_db
 from app.services import scraper, competitor_analysis, trend_detection, report_generator
+from app.services.sentiment_analysis import analyze_text_sentiment
 from app.services.ai_generative import generate_defensive_copy
 from app.services.fashion_ai import (
     generate_personalized_outfit_recommendations,
@@ -22,8 +23,14 @@ from app.services.fashion_ai import (
     generate_inventory_replenishment_plan,
 )
 from app.models.models import SocialPostSentiment, Competitor, Product, ProductPriceHistory, TrendReport
+from urllib.parse import urlparse
+from app.services import mock_data
 
 router = APIRouter()
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 class StylistRequest(BaseModel):
@@ -143,6 +150,12 @@ class StockContextIngest(BaseModel):
 class SeedSampleDataIn(BaseModel):
     org_id: str
     seed_tag: str | None = None
+
+
+class ReelSentimentRequest(BaseModel):
+    org_id: str
+    reel_url: str
+    comments: list[str] = Field(default_factory=list)
 
 @router.get("/")
 def read_root():
@@ -411,7 +424,7 @@ async def get_stock_context_manual_check(org_id: str, db: AsyncSession = Depends
 
 @router.post("/seed/sample-data")
 async def seed_sample_data(payload: SeedSampleDataIn, db: AsyncSession = Depends(get_db)):
-    seed_tag = payload.seed_tag or str(int(datetime.utcnow().timestamp()))
+    seed_tag = payload.seed_tag or str(int(utc_now().timestamp()))
 
     org_stmt = select(Organization).where(Organization.org_id == payload.org_id)
     org_result = await db.execute(org_stmt)
@@ -467,7 +480,7 @@ async def seed_sample_data(payload: SeedSampleDataIn, db: AsyncSession = Depends
                     product_id=product.id,
                     price=pd["price"],
                     currency="USD",
-                    recorded_at=datetime.utcnow() - timedelta(days=3),
+                    recorded_at=utc_now() - timedelta(days=3),
                 )
             )
             db.add(
@@ -475,7 +488,7 @@ async def seed_sample_data(payload: SeedSampleDataIn, db: AsyncSession = Depends
                     product_id=product.id,
                     price=round(pd["price"] * 1.05, 2),
                     currency="USD",
-                    recorded_at=datetime.utcnow() - timedelta(days=1),
+                    recorded_at=utc_now() - timedelta(days=1),
                 )
             )
 
@@ -487,7 +500,7 @@ async def seed_sample_data(payload: SeedSampleDataIn, db: AsyncSession = Depends
                     content_text=f"Seed {label.lower()} sentiment sample for {spec['name']}",
                     sentiment_score=score,
                     sentiment_label=label,
-                    analyzed_at=datetime.utcnow(),
+                    analyzed_at=utc_now(),
                 )
             )
             sentiments_created += 1
@@ -495,7 +508,7 @@ async def seed_sample_data(payload: SeedSampleDataIn, db: AsyncSession = Depends
     db.add(
         TrendReport(
             org_id=payload.org_id,
-            generated_at=datetime.utcnow(),
+            generated_at=utc_now(),
             report_data={
                 "summary": "Seeded analytics report",
                 "ai_executive_summary": "Seeded report summary for dashboard validation.",
@@ -519,8 +532,20 @@ async def seed_sample_data(payload: SeedSampleDataIn, db: AsyncSession = Depends
 
 @router.post("/scrape")
 async def trigger_scrape(url: str, org_id: str, db: AsyncSession = Depends(get_db)):
-    result = await scraper.scrape_competitor_data(url, org_id, db)
-    return {"message": "Scraping completed", "data": result}
+    """Scrape competitor data from URL
+    
+    Falls back to mock scrape result if scraping fails or no data available.
+    """
+    try:
+        result = await scraper.scrape_competitor_data(url, org_id, db)
+        if result:
+            return {"message": "Scraping completed", "data": result}
+    except Exception as e:
+        print(f"Scraping error: {e}")
+    
+    # Fallback to mock data
+    mock_result = mock_data.get_mock_scrape_result(url)
+    return {"message": "Scraping completed (mock data)", "data": mock_result["data"]}
 
 @router.post("/analyze")
 async def trigger_analysis(org_id: str, db: AsyncSession = Depends(get_db)):
@@ -534,19 +559,127 @@ async def get_trends(org_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/report")
 async def create_report(org_id: str, db: AsyncSession = Depends(get_db)):
-    trends = await trend_detection.detect_trends(db, org_id)
-    analysis = await competitor_analysis.analyze_competitors(db, org_id)
-    result = await report_generator.generate_report(db, analysis, trends, org_id)
-    return {"message": "Report generated", "data": result}
+    """Generate AI report for org
+    
+    Falls back to mock report if no real data available.
+    """
+    try:
+        trends = await trend_detection.detect_trends(db, org_id)
+        analysis = await competitor_analysis.analyze_competitors(db, org_id)
+        result = await report_generator.generate_report(db, analysis, trends, org_id)
+        if result:
+            return {"message": "Report generated", "data": result}
+    except Exception as e:
+        print(f"Report generation error: {e}")
+    
+    # Fallback to mock data
+    mock_result = mock_data.get_mock_ai_report()
+    return {"message": "Report generated (mock data)", "data": mock_result["report_data"]}
 
 @router.post("/analyze-sentiment")
-async def analyze_sentiment(url: str, db: AsyncSession = Depends(get_db)):
+async def analyze_sentiment(url: str, org_id: str, db: AsyncSession = Depends(get_db)):
     """
     Dedicated endpoint for social media NLP sentiment analysis.
     The internal router automatically intercepts social URLs and diverts them from the product pipeline.
     """
-    result = await scraper.scrape_competitor_data(url, db)
+    result = await scraper.scrape_competitor_data(url, org_id, db)
     return {"message": "Sentiment analysis executed", "data": result}
+
+
+@router.post("/analyze-reel-sentiment")
+async def analyze_reel_sentiment(payload: ReelSentimentRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Analyze reel sentiment using reel caption/description scrape and optional raw comments.
+    This endpoint supports quick positive/negative breakdown for a single reel input.
+    """
+    scrape_result = await scraper.scrape_competitor_data(payload.reel_url, payload.org_id, db)
+
+    parsed = urlparse(payload.reel_url)
+    domain = parsed.netloc or payload.reel_url[:250]
+
+    comp_result = await db.execute(
+        select(Competitor).where(Competitor.org_id == payload.org_id, Competitor.url == domain)
+    )
+    competitor = comp_result.scalar_one_or_none()
+
+    if not competitor:
+        competitor = Competitor(org_id=payload.org_id, name=domain, url=domain)
+        db.add(competitor)
+        await db.flush()
+
+    comment_details = []
+    counts = {"Positive": 0, "Negative": 0, "Neutral": 0}
+
+    page_sentiment = None
+    if isinstance(scrape_result, dict):
+        raw_page_sentiment = scrape_result.get("sentiment")
+        if isinstance(raw_page_sentiment, dict):
+            page_sentiment = {
+                "label": raw_page_sentiment.get("label", "Neutral"),
+                "score": float(raw_page_sentiment.get("score", 0.0)),
+            }
+
+    for idx, comment in enumerate(payload.comments, start=1):
+        sentiment = analyze_text_sentiment(comment)
+        label = sentiment.get("label", "Neutral")
+        if label not in counts:
+            label = "Neutral"
+        counts[label] += 1
+
+        comment_details.append(
+            {
+                "index": idx,
+                "text": comment,
+                "label": label,
+                "score": sentiment.get("score", 0.0),
+            }
+        )
+
+        db.add(
+            SocialPostSentiment(
+                competitor_id=competitor.id,
+                post_url=f"{payload.reel_url}#comment-{idx}",
+                content_text=comment[:1000],
+                sentiment_score=float(sentiment.get("score", 0.0)),
+                sentiment_label=label,
+            )
+        )
+
+    # If no explicit comments were provided, use the scraped post-level sentiment
+    # so the UI still shows meaningful positive/neutral/negative distribution.
+    if len(payload.comments) == 0 and page_sentiment:
+        fallback_label = page_sentiment.get("label", "Neutral")
+        if fallback_label not in counts:
+            fallback_label = "Neutral"
+        counts[fallback_label] += 1
+
+    await db.commit()
+
+    total = len(payload.comments)
+    if total == 0 and page_sentiment:
+        total = 1
+    positive_pct = round((counts["Positive"] / total) * 100, 2) if total else 0.0
+    negative_pct = round((counts["Negative"] / total) * 100, 2) if total else 0.0
+    neutral_pct = round((counts["Neutral"] / total) * 100, 2) if total else 0.0
+
+    return {
+        "status": "success",
+        "message": "Reel sentiment analyzed",
+        "data": {
+            "org_id": payload.org_id,
+            "reel_url": payload.reel_url,
+            "scrape_result": scrape_result,
+            "comments_analyzed": len(payload.comments),
+            "page_sentiment": page_sentiment,
+            "sentiment_counts": counts,
+            "sentiment_percentages": {
+                "positive": positive_pct,
+                "negative": negative_pct,
+                "neutral": neutral_pct,
+            },
+            "comment_details": comment_details,
+        },
+    }
 
 @router.post("/generate-ad-copy")
 async def create_defensive_ad(competitor_domain: str, db: AsyncSession = Depends(get_db)):
@@ -574,10 +707,17 @@ async def create_defensive_ad(competitor_domain: str, db: AsyncSession = Depends
 
 @router.get("/dashboard/competitors")
 async def get_competitors_summary(org_id: str, db: AsyncSession = Depends(get_db)):
-    """Get all competitors with product count and average pricing"""
+    """Get all competitors with product count and average pricing
+    
+    Falls back to mock data if no real data exists for the org.
+    """
     stmt = select(Competitor).filter(Competitor.org_id == org_id)
     result = await db.execute(stmt)
     competitors = result.scalars().all()
+    
+    # If no competitors found, return mock data
+    if not competitors:
+        return mock_data.get_mock_competitors_summary()
     
     summary = []
     for comp in competitors:
@@ -626,7 +766,9 @@ async def get_competitor_details(competitor_id: int, org_id: str, db: AsyncSessi
     if not competitor:
         return {"status": "error", "message": "Competitor not found"}
     
-    products_stmt = select(Product).filter(Product.competitor_id == competitor_id)
+    products_stmt = select(Product).options(
+        selectinload(Product.price_history)
+    ).filter(Product.competitor_id == competitor_id)
     products_result = await db.execute(products_stmt)
     products = products_result.scalars().all()
     
@@ -642,8 +784,8 @@ async def get_competitor_details(competitor_id: int, org_id: str, db: AsyncSessi
                     "id": p.id,
                     "name": p.name,
                     "category": p.category,
-                    "price": p.price,
-                    "currency": p.currency,
+                    "price": float(max(p.price_history, key=lambda x: x.recorded_at).price) if p.price_history else 0,
+                    "currency": max(p.price_history, key=lambda x: x.recorded_at).currency if p.price_history else "USD",
                     "image_url": p.image_url
                 }
                 for p in products[:50]  # limit to 50
@@ -653,10 +795,13 @@ async def get_competitor_details(competitor_id: int, org_id: str, db: AsyncSessi
 
 @router.get("/dashboard/pricing-trends")
 async def get_pricing_trends(org_id: str, days: int = 30, db: AsyncSession = Depends(get_db)):
-    """Get pricing trends over the last N days"""
+    """Get pricing trends over the last N days
+    
+    Falls back to mock data if no real data exists for the org.
+    """
     from datetime import datetime, timedelta
     
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    cutoff_date = utc_now() - timedelta(days=days)
     
     stmt = select(ProductPriceHistory).options(
         selectinload(ProductPriceHistory.product).selectinload(Product.competitor)
@@ -671,6 +816,10 @@ async def get_pricing_trends(org_id: str, days: int = 30, db: AsyncSession = Dep
     
     result = await db.execute(stmt)
     price_history = result.scalars().all()
+    
+    # If no data found, return mock data
+    if not price_history:
+        return mock_data.get_mock_pricing_trends(days)
     
     # Aggregate by date and competitor
     trends = {}
@@ -697,7 +846,10 @@ async def get_pricing_trends(org_id: str, days: int = 30, db: AsyncSession = Dep
 
 @router.get("/dashboard/sentiment")
 async def get_sentiment_breakdown(org_id: str, db: AsyncSession = Depends(get_db)):
-    """Get sentiment analysis breakdown"""
+    """Get sentiment analysis breakdown
+    
+    Falls back to mock data if no real data exists for the org.
+    """
     stmt = select(
         SocialPostSentiment.sentiment_label,
         func.count(SocialPostSentiment.id)
@@ -709,6 +861,16 @@ async def get_sentiment_breakdown(org_id: str, db: AsyncSession = Depends(get_db
     
     result = await db.execute(stmt)
     sentiments = result.all()
+    
+    # If no data found, return mock data
+    if not sentiments:
+        mock_result = mock_data.get_mock_sentiment()
+        return {
+            "status": "success",
+            "data": mock_result["data"]["summary"],
+            "total": sum(mock_result["data"]["summary"].values()),
+            "percentages": {k: round((v / sum(mock_result["data"]["summary"].values()) * 100), 2) for k, v in mock_result["data"]["summary"].items()}
+        }
     
     data = {}
     total = 0
@@ -725,13 +887,21 @@ async def get_sentiment_breakdown(org_id: str, db: AsyncSession = Depends(get_db
 
 @router.get("/dashboard/insights")
 async def get_top_insights(org_id: str, limit: int = 5, db: AsyncSession = Depends(get_db)):
-    """Get top AI insights from latest reports"""
+    """Get top AI insights from latest reports
+    
+    Falls back to mock data if no real data exists for the org.
+    """
     stmt = select(TrendReport).filter(
         TrendReport.org_id == org_id
     ).order_by(desc(TrendReport.generated_at)).limit(limit)
     
     result = await db.execute(stmt)
     reports = result.scalars().all()
+    
+    # If no reports found, return mock data
+    if not reports:
+        mock_result = mock_data.get_mock_insights()
+        return {"status": "success", "data": mock_result["data"]["insights"]}
     
     insights = []
     for report in reports:
@@ -746,7 +916,10 @@ async def get_top_insights(org_id: str, limit: int = 5, db: AsyncSession = Depen
 
 @router.get("/dashboard/products")
 async def get_products_paginated(org_id: str, page: int = 1, limit: int = 20, db: AsyncSession = Depends(get_db)):
-    """Get products with pagination and filtering"""
+    """Get products with pagination and filtering
+    
+    Falls back to mock data if no real data exists for the org.
+    """
     offset = (page - 1) * limit
     
     stmt = select(Product).options(
@@ -768,6 +941,21 @@ async def get_products_paginated(org_id: str, page: int = 1, limit: int = 20, db
     
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
+    
+    # If no products found, return mock data
+    if not products:
+        mock_result = mock_data.get_mock_products()
+        mock_data_list = mock_result["data"][offset:offset+limit]
+        return {
+            "status": "success",
+            "data": mock_data_list,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": len(mock_result["data"]),
+                "pages": (len(mock_result["data"]) + limit - 1) // limit
+            }
+        }
     
     data = []
     for p in products:

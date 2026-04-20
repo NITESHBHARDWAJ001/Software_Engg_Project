@@ -23,6 +23,201 @@ paths:
                   message:
                     type: string
 
+  /ai/stylist:
+    post:
+      summary: Personal AI stylist recommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StylistRequest'
+      responses:
+        '200':
+          description: Recommendations generated
+
+  /ai/size-fit:
+    post:
+      summary: Predict size and fit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SizeFitRequest'
+      responses:
+        '200':
+          description: Size fit prediction generated
+
+  /ai/trend-forecast:
+    post:
+      summary: Forecast fashion trends
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrendForecastRequest'
+      responses:
+        '200':
+          description: Trend forecast generated
+
+  /ai/design-copilot:
+    post:
+      summary: Generate design copilot concepts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesignCopilotRequest'
+      responses:
+        '200':
+          description: Design concepts generated
+
+  /ai/dynamic-pricing:
+    post:
+      summary: Dynamic pricing recommendation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DynamicPricingRequest'
+      responses:
+        '200':
+          description: Pricing recommendation generated
+
+  /ai/discovery-feed:
+    post:
+      summary: Personalized discovery feed generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoveryFeedRequest'
+      responses:
+        '200':
+          description: Discovery feed generated
+
+  /ai/product-content:
+    post:
+      summary: Product content bundle generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductContentRequest'
+      responses:
+        '200':
+          description: Product content generated
+
+  /ai/support-assistant:
+    post:
+      summary: AI support assistant response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportAssistantRequest'
+      responses:
+        '200':
+          description: Support response generated
+
+  /ai/visual-search:
+    post:
+      summary: AI visual search matches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisualSearchRequest'
+      responses:
+        '200':
+          description: Visual matches generated
+
+  /ai/inventory-replenishment:
+    post:
+      summary: Inventory replenishment planning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryReplenishmentRequest'
+      responses:
+        '200':
+          description: Replenishment plan generated
+
+  /orgs/upsert:
+    post:
+      summary: Create or update organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationUpsert'
+      responses:
+        '200':
+          description: Organization upserted
+
+  /orgs/{org_id}:
+    delete:
+      summary: Delete organization
+      parameters:
+        - in: path
+          name: org_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization delete result
+
+  /stock-context/ingest:
+    post:
+      summary: Ingest stock context entries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockContextIngest'
+      responses:
+        '200':
+          description: Stock context ingested
+
+  /stock-context/manual-check:
+    get:
+      summary: Read latest stock context entries
+      parameters:
+        - in: query
+          name: org_id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Stock context results
+
+  /seed/sample-data:
+    post:
+      summary: Seed sample analytics data for an org
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeedSampleDataIn'
+      responses:
+        '200':
+          description: Sample data seeded
+
   /scrape:
     post:
       summary: Trigger scraping of a competitor URL
@@ -316,6 +511,328 @@ paths:
 
 components:
   schemas:
+    StylistRequest:
+      type: object
+      required: [user_profile, occasion, budget]
+      properties:
+        user_profile:
+          type: object
+          additionalProperties: true
+        occasion:
+          type: string
+          minLength: 2
+        budget:
+          type: number
+          exclusiveMinimum: 0
+        preferences:
+          type: array
+          items:
+            type: string
+
+    SizeFitRequest:
+      type: object
+      required: [measurements, garment_type, gender, fit_preference]
+      properties:
+        measurements:
+          type: object
+          additionalProperties: true
+        garment_type:
+          type: string
+          minLength: 2
+        gender:
+          type: string
+          enum: [male, female]
+        fit_preference:
+          type: string
+          enum: [fitted, relaxed, loose]
+        brand_region:
+          type: string
+
+    TrendForecastRequest:
+      type: object
+      required: [season, region, product_category, target_gender, price_segment]
+      properties:
+        season:
+          type: string
+          minLength: 2
+        region:
+          type: string
+          minLength: 2
+        product_category:
+          type: string
+          minLength: 2
+        target_gender:
+          type: string
+          enum: [male, female, unisex]
+        price_segment:
+          type: string
+          minLength: 2
+
+    DesignCopilotRequest:
+      type: object
+      required: [collection_name, season, region, target_gender, product_category]
+      properties:
+        collection_name:
+          type: string
+          minLength: 2
+        season:
+          type: string
+          minLength: 2
+        region:
+          type: string
+          minLength: 2
+        target_gender:
+          type: string
+          enum: [male, female, unisex]
+        product_category:
+          type: string
+          minLength: 2
+        inspiration_keywords:
+          type: array
+          items:
+            type: string
+
+    DynamicPricingRequest:
+      type: object
+      required: [product_name, category, current_price, cost_price, stock_units, demand_signal, season]
+      properties:
+        product_name:
+          type: string
+          minLength: 2
+        category:
+          type: string
+          minLength: 2
+        current_price:
+          type: number
+          exclusiveMinimum: 0
+        cost_price:
+          type: number
+          exclusiveMinimum: 0
+        stock_units:
+          type: integer
+          minimum: 0
+        demand_signal:
+          type: string
+          minLength: 2
+        season:
+          type: string
+          minLength: 2
+        competitor_prices:
+          type: array
+          items:
+            type: number
+
+    DiscoveryFeedRequest:
+      type: object
+      required: [customer_name, location]
+      properties:
+        customer_name:
+          type: string
+          minLength: 2
+        location:
+          type: string
+          minLength: 2
+        browsing_history:
+          type: array
+          items:
+            type: string
+        purchase_history:
+          type: array
+          items:
+            type: string
+        upcoming_occasions:
+          type: array
+          items:
+            type: string
+        preferred_categories:
+          type: array
+          items:
+            type: string
+
+    ProductContentRequest:
+      type: object
+      required: [product_name, category, fabric, color, target_audience, tone]
+      properties:
+        product_name:
+          type: string
+          minLength: 2
+        category:
+          type: string
+          minLength: 2
+        fabric:
+          type: string
+          minLength: 2
+        color:
+          type: string
+          minLength: 2
+        embellishments:
+          type: array
+          items:
+            type: string
+        target_audience:
+          type: string
+          minLength: 2
+        tone:
+          type: string
+          minLength: 2
+        languages:
+          type: array
+          items:
+            type: string
+
+    SupportAssistantRequest:
+      type: object
+      required: [customer_question]
+      properties:
+        customer_question:
+          type: string
+          minLength: 3
+        product_context:
+          type: object
+          additionalProperties: true
+        size_context:
+          type: object
+          additionalProperties: true
+        shipping_policy:
+          type: string
+        return_policy:
+          type: string
+
+    VisualSearchRequest:
+      type: object
+      properties:
+        image_description:
+          type: string
+        image_url:
+          type: string
+        target_category:
+          type: string
+        occasion:
+          type: string
+        budget:
+          type: number
+          exclusiveMinimum: 0
+        region:
+          type: string
+        style_preferences:
+          type: array
+          items:
+            type: string
+
+    InventoryReplenishmentRequest:
+      type: object
+      required: [sku, product_name, category, current_stock, avg_weekly_sales, lead_time_days, season, region]
+      properties:
+        sku:
+          type: string
+          minLength: 2
+        product_name:
+          type: string
+          minLength: 2
+        category:
+          type: string
+          minLength: 2
+        current_stock:
+          type: integer
+          minimum: 0
+        avg_weekly_sales:
+          type: number
+          minimum: 0
+        lead_time_days:
+          type: integer
+          minimum: 0
+        season:
+          type: string
+          minLength: 2
+        region:
+          type: string
+          minLength: 2
+        current_open_po_units:
+          type: integer
+          minimum: 0
+          default: 0
+        service_level:
+          type: string
+          enum: [low, medium, high]
+          default: medium
+
+    OrganizationUpsert:
+      type: object
+      required: [org_id]
+      properties:
+        org_id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+
+    StockContextItem:
+      type: object
+      required: [sku, name]
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        current_stock:
+          type: integer
+          default: 0
+        note:
+          type: string
+
+    StockContextIngest:
+      type: object
+      required: [org_id, items]
+      properties:
+        org_id:
+          type: string
+        source_mode:
+          type: string
+          default: AUTO
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockContextItem'
+
+    SeedSampleDataIn:
+      type: object
+      required: [org_id]
+      properties:
+        org_id:
+          type: string
+        seed_tag:
+          type: string
+
+    StockContextEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        org_id:
+          type: string
+        source_mode:
+          type: string
+        sku:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        current_stock:
+          type: integer
+        note:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+
     CompetitorSummary:
       type: object
       properties:

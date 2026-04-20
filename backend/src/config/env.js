@@ -12,6 +12,10 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().min(1),
   SUPER_ADMIN_EMAIL: z.string().email(),
   SUPER_ADMIN_PASSWORD: z.string().min(12),
+  INSTAGRAM_GRAPH_ACCESS_TOKEN: z.string().optional(),
+  INSTAGRAM_BUSINESS_ACCOUNT_ID: z.string().optional(),
+  INSTAGRAM_BUSINESS_USERNAME: z.string().optional(),
+  INSTAGRAM_API_VERSION: z.string().default('v23.0'),
 });
 
 const parsed = envSchema.safeParse(process.env);
